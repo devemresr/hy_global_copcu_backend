@@ -1,0 +1,30 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+node_modules
+dist
+*.local
+
+# Secrets - never commit real credentials
+.env
+.env.*
+!.env.example
+
+# This repo lives inside the frontend project's folder on disk; the
+# frontend has its own git history and is never part of this repo.
+/frontend
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+scripts/seed.ts
