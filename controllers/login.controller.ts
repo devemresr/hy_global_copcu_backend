@@ -47,7 +47,12 @@ const login = async (req: Request, res: Response): Promise<void> => {
 			return;
 		}
 
-		const { password: _password, createdAt, updatedAt, ...publicUser } = user;
+		const {
+			password: _password,
+			createdAt: _createdAt,
+			updatedAt: _updatedAt,
+			...publicUser
+		} = user;
 
 		log.info({ userId: user._id.toString() }, 'User logged in');
 

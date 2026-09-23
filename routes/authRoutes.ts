@@ -8,8 +8,12 @@ import { loginSchema } from '../schemas/auth.schema';
 const router = () => {
 	const router = Router();
 
-	router.post(AUTH_ROUTES.LOGIN, loginLimiter, validateBody(loginSchema), login);
-	// router.post(AUTH_ROUTES.LOGOUT, logout());
+	router.post(
+		AUTH_ROUTES.LOGIN,
+		loginLimiter,
+		validateBody(loginSchema),
+		login,
+	);
 
 	router.post(AUTH_ROUTES.REFRESH, refresh);
 	return router;
