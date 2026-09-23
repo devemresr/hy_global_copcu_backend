@@ -54,6 +54,11 @@ const logEventSchema = new Schema<TimeStampedLogEvent>(
 		// nothing left to join back to through entityId.
 		entityKey: { type: String, required: true },
 		fields: { type: [fieldChangeSchema], default: [] },
+		// Shared by every row a single bulk request touches (see
+		// items.controller.ts's bulkUpdateItems), null for anything else - lets
+		// listLogEvents group a bulk edit's N per-row entries back into the one
+		// event they actually came from instead of paginating over raw rows.
+		batchId: { type: String, default: null, index: true },
 	},
 	{ timestamps: true, collection: 'log_events' },
 );
@@ -71,6 +76,7 @@ export type LogEventData = {
 	entityId: Types.ObjectId;
 	entityKey: string;
 	fields: FieldChange[];
+	batchId?: string | null;
 };
 
 export type TimeStampedLogEvent = DocumentWithTimestamps<LogEventData> & {

@@ -10,13 +10,15 @@ export const AUTH_ROUTES = {
 	LOGIN: `${API_BASE_PATHS.AUTH}/login`,
 	REGISTER: `${API_BASE_PATHS.AUTH}/register`,
 	REFRESH: `${API_BASE_PATHS.AUTH}/refresh`,
-	LOGOUT: `${API_BASE_PATHS.AUTH}/logout`,
 	UPDATE: `${API_BASE_PATHS.AUTH}/update`,
 } as const;
 
 export const ITEMS_ROUTES = {
 	LIST: `${API_BASE_PATHS.ITEMS}`,
 	CREATE: `${API_BASE_PATHS.ITEMS}`,
+	// Registered before UPDATE in itemRoutes.ts - Express would otherwise match
+	// PATCH /items/bulk against /items/:id first, treating "bulk" as an id.
+	BULK_UPDATE: `${API_BASE_PATHS.ITEMS}/bulk`,
 	UPDATE: `${API_BASE_PATHS.ITEMS}/:id`,
 	DELETE: `${API_BASE_PATHS.ITEMS}/:id`,
 } as const;

@@ -12,6 +12,9 @@ type RecordLogEventInput = {
 	entityId: string;
 	entityKey: string;
 	fields: FieldChange[];
+	// Shared across every recordLogEvent call from the same bulk request - see
+	// LogEvent model's own comment.
+	batchId?: string | null;
 };
 
 // Best-effort: the item write already committed by the time this runs, so a

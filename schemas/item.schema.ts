@@ -12,13 +12,12 @@ export type StorageUnit = z.infer<typeof storageUnitSchema>;
 // looks like for each - ItemData's paraBirimi/model types (models/Item.ts),
 // items.controller.ts's create/update handling, and EDITABLE_ITEM_FIELDS
 // below all derive from this instead of a hand-maintained field list plus
-// ad hoc `typeof`/range checks scattered across the controller.
+// ad hoc `typeof`/range checks scattered across the controller. depolama/
+// fiyat each split into a plain magnitude plus a required unit
+// (depolamaBirimi/paraBirimi) rather than one combined string like "128GB".
 export const editableItemFieldsSchema = z.object({
 	model: z.string().trim().min(1, 'Model is required'),
 	bellekTipi: z.string().trim().min(1).nullable().optional(),
-	// depolama/depolamaBirimi split the same way fiyat/paraBirimi do: a plain
-	// magnitude plus a required unit, instead of a single "128GB" string a
-	// filter or sort would have to re-parse.
 	depolama: z.number().positive('depolama must be a positive number').nullable(),
 	depolamaBirimi: storageUnitSchema,
 	ram: z.string().trim().min(1).nullable().optional(),
@@ -42,8 +41,23 @@ export const createItemSchema = editableItemFieldsSchema.partial({
 // A PATCH only ever sends the fields it's actually changing.
 export const updateItemSchema = editableItemFieldsSchema.partial();
 
+// Capped at 1000 ids mostly as abuse/typo insurance - BulkEditPanel's filter
+// conditions could in principle match far more rows than anyone actually
+// means to touch in one request.
+export const bulkUpdateItemsSchema = z.object({
+	ids: z
+		.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid item id'))
+		.min(1, 'At least one item id is required')
+		.max(1000, 'Too many items in one bulk update'),
+	fields: updateItemSchema.refine(
+		(fields) => Object.keys(fields).length > 0,
+		{ message: 'At least one field to update is required' },
+	),
+});
+
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
+export type BulkUpdateItemsInput = z.infer<typeof bulkUpdateItemsSchema>;
 
 export const EDITABLE_ITEM_FIELDS = Object.keys(
 	editableItemFieldsSchema.shape,

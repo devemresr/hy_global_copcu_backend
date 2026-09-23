@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { nanoid } from 'nanoid';
 import { Item } from '../models/Item';
 import { LOG_ACTIONS, LOG_ENTITY_TYPES } from '../models/LogEvent';
 import type { FieldChange } from '../models/LogEvent';
@@ -6,6 +7,7 @@ import {
 	EDITABLE_ITEM_FIELDS,
 	type CreateItemInput,
 	type UpdateItemInput,
+	type BulkUpdateItemsInput,
 } from '../schemas/item.schema';
 import { recordLogEvent } from '../services/logEvents/recordLogEvent.service';
 import { createCachedFetcher } from '../util/queryCache';
@@ -137,6 +139,69 @@ export const updateItem = async (
 		res.status(200).json({ success: true, item });
 	} catch (error) {
 		handleHttpError(error, res, scopedLog);
+	}
+};
+
+// BulkEditPanel used to fire one PATCH per matched row (Promise.allSettled
+// client-side) - same end result, but N round trips and N separate write
+// commands instead of one. Every matched id gets the exact same `fields`
+// here, so a single updateMany's one filter/one $set covers it; bulkWrite is
+// the right call only when different documents need different updates in
+// one round trip, which isn't the case for "set this field to this value on
+// every matched row".
+export const bulkUpdateItems = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
+	try {
+		const actor = requireLogActor(req);
+		const { ids, fields }: BulkUpdateItemsInput = req.body;
+
+		const previousItems = await Item.find({ _id: { $in: ids } }).lean();
+
+		const result = await Item.updateMany(
+			{ _id: { $in: ids } },
+			{ $set: fields },
+			{ runValidators: true },
+		);
+
+		itemsCache.invalidate();
+
+		// One id shared by every row this request touches, so listLogEvents can
+		// fold them back into the single bulk event they came from instead of
+		// paginating over N indistinguishable per-row entries (see LogEvent
+		// model's own comment on batchId).
+		const batchId = nanoid();
+		const changedFieldKeys = Object.keys(fields) as (keyof UpdateItemInput)[];
+		await Promise.all(
+			previousItems.map((previous) => {
+				const changedFields: FieldChange[] = changedFieldKeys
+					.filter((field) => fields[field] !== (previous[field] ?? null))
+					.map((field) => ({
+						field,
+						previousValue: previous[field] ?? null,
+						newValue: fields[field] ?? null,
+					}));
+				if (changedFields.length === 0) return Promise.resolve();
+				return recordLogEvent({
+					...actor,
+					action: LOG_ACTIONS.ITEMS_UPDATE,
+					entityType: LOG_ENTITY_TYPES.ITEM,
+					entityId: previous._id.toString(),
+					entityKey: previous.model,
+					fields: changedFields,
+					batchId,
+				});
+			}),
+		);
+
+		res.status(200).json({
+			success: true,
+			matchedCount: result.matchedCount,
+			modifiedCount: result.modifiedCount,
+		});
+	} catch (error) {
+		handleHttpError(error, res, log);
 	}
 };
 
