@@ -1,5 +1,7 @@
 import mongoose, { Types } from 'mongoose';
 import type { DocumentWithTimestamps } from './User';
+import { CURRENCY_VALUES } from '../schemas/item.schema';
+import type { Currency } from '../schemas/item.schema';
 
 const { Schema } = mongoose;
 
@@ -11,7 +13,7 @@ const pricingRuleSchema = new Schema<TimeStampedPricingRule>(
 		price: { type: Number, required: true },
 		currency: {
 			type: String,
-			enum: ['TRY', 'USD'],
+			enum: CURRENCY_VALUES,
 			required: true,
 			default: 'TRY',
 		},
@@ -32,7 +34,7 @@ export type PricingRuleData = {
 	category: string;
 	sizeGb: number;
 	price: number;
-	currency: 'TRY' | 'USD';
+	currency: Currency;
 };
 
 export type TimeStampedPricingRule = DocumentWithTimestamps<PricingRuleData> & {

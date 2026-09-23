@@ -2,6 +2,7 @@ import * as bcrypt from 'bcryptjs';
 import type { Request, Response } from 'express';
 import { User } from '../models/User';
 import type { TimeStampedUser } from '../models/User';
+import type { LoginInput } from '../schemas/auth.schema';
 import logger from '../util/logger';
 import { issueAuthResponse } from './auth.helper';
 import { InvalidCredentialsError } from '../services/auth/auth.errors';
@@ -22,11 +23,11 @@ const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
  * Validates credentials and issues an auth response (tokens + cookie).
  */
 const login = async (req: Request, res: Response): Promise<void> => {
-	const { email, password: reqPassword } = req.body;
-	const normalizedEmail =
-		typeof email === 'string' ? email.toLowerCase().trim() : email;
+	// validateBody(loginSchema) has already trimmed/lowercased email by the
+	// time this runs.
+	const { email, password: reqPassword }: LoginInput = req.body;
 	try {
-		const user = await User.findOne({ email: normalizedEmail })
+		const user = await User.findOne({ email })
 			.select('+password -__v')
 			.lean<TimeStampedUser>();
 
@@ -37,7 +38,7 @@ const login = async (req: Request, res: Response): Promise<void> => {
 
 		if (!user || !isMatch) {
 			log.warn(
-				{ email: normalizedEmail },
+				{ email },
 				user
 					? 'Login attempt with wrong password'
 					: 'Login attempt for non-existent user',

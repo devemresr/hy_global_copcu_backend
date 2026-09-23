@@ -1,19 +1,32 @@
 import mongoose, { Types } from 'mongoose';
 import type { DocumentWithTimestamps } from './User';
+import { CURRENCY_VALUES, STORAGE_UNIT_VALUES } from '../schemas/item.schema';
+import type { Currency, StorageUnit } from '../schemas/item.schema';
 
 const { Schema } = mongoose;
 
 const itemSchema = new Schema<TimeStampedItem>(
 	{
-		manufacturer: { type: String, required: false },
+		uretici: { type: String, required: false },
 		ram: { type: String, required: false },
-		match_type: { type: String, required: false },
-		BellekTipi: { type: String, required: false },
-		queried_as: { type: String, required: false },
-		Model: { type: String, required: true, index: true },
-		Depoloma: { type: String, required: false },
-		Fiyat: { type: Number, required: false, default: null },
-		Currency: { type: String, enum: ['TRY', 'USD'], required: true, default: 'TRY' },
+		eslesmeTuru: { type: String, required: false },
+		bellekTipi: { type: String, required: false },
+		sorgulananDeger: { type: String, required: false },
+		model: { type: String, required: true, index: true },
+		depolama: { type: Number, required: false, default: null },
+		depolamaBirimi: {
+			type: String,
+			enum: STORAGE_UNIT_VALUES,
+			required: true,
+			default: 'GB',
+		},
+		fiyat: { type: Number, required: false, default: null },
+		paraBirimi: {
+			type: String,
+			enum: CURRENCY_VALUES,
+			required: true,
+			default: 'TRY',
+		},
 	},
 	{ timestamps: true, collection: 'items' },
 );
@@ -21,15 +34,16 @@ const itemSchema = new Schema<TimeStampedItem>(
 export const Item = mongoose.model<TimeStampedItem>('Item', itemSchema);
 
 export type ItemData = {
-	manufacturer?: string | null;
+	uretici?: string | null;
 	ram?: string | null;
-	match_type?: string | null;
-	BellekTipi?: string | null;
-	queried_as?: string | null;
-	Model: string;
-	Depoloma?: string | null;
-	Fiyat: number | null;
-	Currency: 'TRY' | 'USD';
+	eslesmeTuru?: string | null;
+	bellekTipi?: string | null;
+	sorgulananDeger?: string | null;
+	model: string;
+	depolama?: number | null;
+	depolamaBirimi: StorageUnit;
+	fiyat: number | null;
+	paraBirimi: Currency;
 };
 
 export type TimeStampedItem = DocumentWithTimestamps<ItemData> & {

@@ -1,12 +1,16 @@
 import type { Request, Response } from 'express';
 import { Item } from '../models/Item';
-import type { ItemData } from '../models/Item';
 import { LOG_ACTIONS, LOG_ENTITY_TYPES } from '../models/LogEvent';
 import type { FieldChange } from '../models/LogEvent';
+import {
+	EDITABLE_ITEM_FIELDS,
+	type CreateItemInput,
+	type UpdateItemInput,
+} from '../schemas/item.schema';
 import { recordLogEvent } from '../services/logEvents/recordLogEvent.service';
 import { createCachedFetcher } from '../util/queryCache';
 import { requireUserId } from './auth.helper';
-import { UnauthorizedError, NotFoundError, ValidationError } from '../errors/HttpError';
+import { UnauthorizedError, NotFoundError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';
 
@@ -21,31 +25,13 @@ const itemsCache = createCachedFetcher(() => Item.find().lean(), {
 	ttlMs: ITEMS_TTL_MS,
 });
 
-// Admin edits only ever touch these fields (mirrors EditableField on the
-// client) - never trust req.body directly into findByIdAndUpdate.
-const UPDATABLE_FIELDS = [
-	'Model',
-	'BellekTipi',
-	'Depoloma',
-	'ram',
-	'Fiyat',
-	'Currency',
-] as const satisfies readonly (keyof ItemData)[];
-
-function pickUpdatableFields(body: Request['body']) {
-	const update: Partial<ItemData> = {};
-	for (const field of UPDATABLE_FIELDS) {
-		if (field in body) {
-			update[field] = body[field];
-		}
-	}
-	return update;
-}
-
 // requirePermission/requireHeadAdmin always run before a mutating route
 // below and set both, so this narrows the optional Request fields once
 // instead of at every call site.
-function requireLogActor(req: Request): { adminId: string; adminUsername: string } {
+function requireLogActor(req: Request): {
+	adminId: string;
+	adminUsername: string;
+} {
 	const adminId = requireUserId(req);
 	if (!req.adminUsername) {
 		throw new UnauthorizedError(
@@ -55,7 +41,10 @@ function requireLogActor(req: Request): { adminId: string; adminUsername: string
 	return { adminId, adminUsername: req.adminUsername };
 }
 
-export const listItems = async (_req: Request, res: Response): Promise<void> => {
+export const listItems = async (
+	_req: Request,
+	res: Response,
+): Promise<void> => {
 	try {
 		const items = await itemsCache.get();
 		res.status(200).json({ success: true, items });
@@ -64,19 +53,18 @@ export const listItems = async (_req: Request, res: Response): Promise<void> => 
 	}
 };
 
-export const createItem = async (req: Request, res: Response): Promise<void> => {
+export const createItem = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
 	try {
 		const actor = requireLogActor(req);
-		const fields = pickUpdatableFields(req.body);
-
-		if (!fields.Model || typeof fields.Model !== 'string') {
-			throw new ValidationError('Model is required');
-		}
+		const fields: CreateItemInput = req.body;
 
 		const item = await Item.create(fields);
 		itemsCache.invalidate();
 
-		const changedFields: FieldChange[] = UPDATABLE_FIELDS.map((field) => ({
+		const changedFields: FieldChange[] = EDITABLE_ITEM_FIELDS.map((field) => ({
 			field,
 			previousValue: null,
 			newValue: item[field] ?? null,
@@ -86,7 +74,7 @@ export const createItem = async (req: Request, res: Response): Promise<void> => 
 			action: LOG_ACTIONS.ITEMS_CREATE,
 			entityType: LOG_ENTITY_TYPES.ITEM,
 			entityId: item._id.toString(),
-			entityKey: item.Model,
+			entityKey: item.model,
 			fields: changedFields,
 		});
 
@@ -96,13 +84,16 @@ export const createItem = async (req: Request, res: Response): Promise<void> => 
 	}
 };
 
-export const updateItem = async (req: Request, res: Response): Promise<void> => {
+export const updateItem = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
 	const { id } = req.params;
 	const scopedLog = log.child({ itemId: id });
 
 	try {
 		const actor = requireLogActor(req);
-		const update = pickUpdatableFields(req.body);
+		const update: UpdateItemInput = req.body;
 
 		const previous = await Item.findById(id).lean();
 		if (!previous) {
@@ -121,20 +112,24 @@ export const updateItem = async (req: Request, res: Response): Promise<void> => 
 		// Guaranteed-fresh next read beats staying inside the TTL window.
 		itemsCache.invalidate();
 
-		const changedFields: FieldChange[] = UPDATABLE_FIELDS.filter(
-			(field) => field in update && update[field] !== (previous[field] ?? null),
-		).map((field) => ({
-			field,
-			previousValue: previous[field] ?? null,
-			newValue: update[field] ?? null,
-		}));
+		// update only ever has keys that were actually sent (see updateItemSchema's
+		// .partial() - an omitted field is absent here, not present-as-undefined).
+		const changedFields: FieldChange[] = (
+			Object.keys(update) as (keyof UpdateItemInput)[]
+		)
+			.filter((field) => update[field] !== (previous[field] ?? null))
+			.map((field) => ({
+				field,
+				previousValue: previous[field] ?? null,
+				newValue: update[field] ?? null,
+			}));
 		if (changedFields.length > 0) {
 			await recordLogEvent({
 				...actor,
 				action: LOG_ACTIONS.ITEMS_UPDATE,
 				entityType: LOG_ENTITY_TYPES.ITEM,
 				entityId: item._id.toString(),
-				entityKey: item.Model,
+				entityKey: item.model,
 				fields: changedFields,
 			});
 		}
@@ -145,7 +140,10 @@ export const updateItem = async (req: Request, res: Response): Promise<void> => 
 	}
 };
 
-export const deleteItem = async (req: Request, res: Response): Promise<void> => {
+export const deleteItem = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
 	const { id } = req.params;
 	const scopedLog = log.child({ itemId: id });
 
@@ -159,7 +157,7 @@ export const deleteItem = async (req: Request, res: Response): Promise<void> => 
 
 		itemsCache.invalidate();
 
-		const changedFields: FieldChange[] = UPDATABLE_FIELDS.map((field) => ({
+		const changedFields: FieldChange[] = EDITABLE_ITEM_FIELDS.map((field) => ({
 			field,
 			previousValue: item[field] ?? null,
 			newValue: null,
@@ -169,7 +167,7 @@ export const deleteItem = async (req: Request, res: Response): Promise<void> => 
 			action: LOG_ACTIONS.ITEMS_DELETE,
 			entityType: LOG_ENTITY_TYPES.ITEM,
 			entityId: item._id.toString(),
-			entityKey: item.Model,
+			entityKey: item.model,
 			fields: changedFields,
 		});
 

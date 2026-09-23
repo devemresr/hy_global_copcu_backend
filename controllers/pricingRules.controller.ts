@@ -1,15 +1,17 @@
 import type { Request, Response } from 'express';
 import { PricingRule } from '../models/PricingRule';
-import type { PricingRuleData } from '../models/PricingRule';
 import { LOG_ACTIONS, LOG_ENTITY_TYPES } from '../models/LogEvent';
 import type { FieldChange } from '../models/LogEvent';
+import type {
+	AddPricingRuleInput,
+	EditPricingRuleInput,
+} from '../schemas/pricingRule.schema';
 import { recordLogEvent } from '../services/logEvents/recordLogEvent.service';
 import { createCachedFetcher } from '../util/queryCache';
 import { requireUserId } from './auth.helper';
 import {
 	UnauthorizedError,
 	NotFoundError,
-	ValidationError,
 	ConflictError,
 } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
@@ -25,23 +27,6 @@ const pricingRulesCache = createCachedFetcher(
 	() => PricingRule.find().lean(),
 	{ ttlMs: PRICING_RULES_TTL_MS },
 );
-
-// A rule's identity is its (category, sizeGb) pair, not something an edit
-// changes - only the price/currency it resolves to is editable in place.
-const UPDATABLE_FIELDS = [
-	'price',
-	'currency',
-] as const satisfies readonly (keyof PricingRuleData)[];
-
-function pickUpdatableFields(body: Request['body']) {
-	const update: Partial<PricingRuleData> = {};
-	for (const field of UPDATABLE_FIELDS) {
-		if (field in body) {
-			update[field] = body[field];
-		}
-	}
-	return update;
-}
 
 function ruleKey(rule: { category: string; sizeGb: number }): string {
 	return `${rule.category}/${rule.sizeGb}GB`;
@@ -83,26 +68,11 @@ export const listPricingRules = async (
 export const addPricingRule = async (req: Request, res: Response): Promise<void> => {
 	try {
 		const actor = requireLogActor(req);
-		const { category, sizeGb, price, currency } = req.body;
-
-		if (typeof category !== 'string' || !category.trim()) {
-			throw new ValidationError('category is required');
-		}
-		if (typeof sizeGb !== 'number' || sizeGb <= 0) {
-			throw new ValidationError('sizeGb must be a positive number');
-		}
-		if (typeof price !== 'number' || price < 0) {
-			throw new ValidationError('price must be a non-negative number');
-		}
+		const fields: AddPricingRuleInput = req.body;
 
 		let rule;
 		try {
-			rule = await PricingRule.create({
-				category,
-				sizeGb,
-				price,
-				currency: currency === 'USD' ? 'USD' : 'TRY',
-			});
+			rule = await PricingRule.create(fields);
 		} catch (createError) {
 			if (isDuplicateKeyError(createError)) {
 				throw new ConflictError('A rule for this category/size already exists');
@@ -138,7 +108,7 @@ export const editPricingRule = async (req: Request, res: Response): Promise<void
 
 	try {
 		const actor = requireLogActor(req);
-		const update = pickUpdatableFields(req.body);
+		const update: EditPricingRuleInput = req.body;
 
 		const previous = await PricingRule.findById(id).lean();
 		if (!previous) {
@@ -156,13 +126,17 @@ export const editPricingRule = async (req: Request, res: Response): Promise<void
 
 		pricingRulesCache.invalidate();
 
-		const changedFields: FieldChange[] = UPDATABLE_FIELDS.filter(
-			(field) => field in update && update[field] !== (previous[field] ?? null),
-		).map((field) => ({
-			field,
-			previousValue: previous[field] ?? null,
-			newValue: update[field] ?? null,
-		}));
+		// update only ever has keys that were actually sent (editPricingRuleSchema's
+		// fields are plain .optional(), not defaulted - see its own comment).
+		const changedFields: FieldChange[] = (
+			Object.keys(update) as (keyof EditPricingRuleInput)[]
+		)
+			.filter((field) => update[field] !== (previous[field] ?? null))
+			.map((field) => ({
+				field,
+				previousValue: previous[field] ?? null,
+				newValue: update[field] ?? null,
+			}));
 		if (changedFields.length > 0) {
 			await recordLogEvent({
 				...actor,

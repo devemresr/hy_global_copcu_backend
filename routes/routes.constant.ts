@@ -1,9 +1,9 @@
 export const API_BASE_PATHS = {
 	AUTH: '/auth',
-	ROOM: '/room',
 	ITEMS: '/items',
 	ADMINS: '/admins',
 	PRICING_RULES: '/pricing-rules',
+	LOG_EVENTS: '/log-events',
 } as const;
 
 export const AUTH_ROUTES = {
@@ -12,15 +12,6 @@ export const AUTH_ROUTES = {
 	REFRESH: `${API_BASE_PATHS.AUTH}/refresh`,
 	LOGOUT: `${API_BASE_PATHS.AUTH}/logout`,
 	UPDATE: `${API_BASE_PATHS.AUTH}/update`,
-} as const;
-
-export const ROOM_ROUTES = {
-	CREATE: `${API_BASE_PATHS.ROOM}/create`,
-	JOIN: `${API_BASE_PATHS.ROOM}/join`,
-	LIST_ACTIVE: `${API_BASE_PATHS.ROOM}/active`,
-	ONBOARD: `${API_BASE_PATHS.ROOM}/onboard`,
-	USERS: `${API_BASE_PATHS.ROOM}/users`,
-	GET_MISSING_PACKET: '',
 } as const;
 
 export const ITEMS_ROUTES = {
@@ -41,4 +32,8 @@ export const PRICING_RULES_ROUTES = {
 	CREATE: `${API_BASE_PATHS.PRICING_RULES}`,
 	UPDATE: `${API_BASE_PATHS.PRICING_RULES}/:id`,
 	DELETE: `${API_BASE_PATHS.PRICING_RULES}/:id`,
+} as const;
+
+export const LOG_EVENTS_ROUTES = {
+	LIST: `${API_BASE_PATHS.LOG_EVENTS}`,
 } as const;
