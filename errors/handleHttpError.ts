@@ -8,7 +8,7 @@ import env from '../config/env';
 
 /**
  * Single catch-all dispatcher for every typed HttpError across the API -
- * the auth layer and resource routes (items/admins/pricing-rules) alike -
+ * the auth layer and resource routes (items/admins/site settings) alike -
  * so status/message formatting never gets duplicated at each call site.
  * Callers throw a typed error and pass it here in one catch block; nothing
  * should call res.status(...).json(...) directly outside of this file.

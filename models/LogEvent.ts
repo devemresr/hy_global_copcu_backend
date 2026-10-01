@@ -14,11 +14,10 @@ export const LOG_ACTIONS = {
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
 
-// What kind of record an action was taken on - items and pricing rules share
+// What kind of record an action was taken on - items and site settings share
 // one log collection instead of growing a near-duplicate model per entity.
 export const LOG_ENTITY_TYPES = {
 	ITEM: 'item',
-	PRICING_RULE: 'pricing_rule',
 	SITE_MAINTENANCE: 'site_maintenance',
 	SITE_NOTICE: 'site_notice',
 } as const;

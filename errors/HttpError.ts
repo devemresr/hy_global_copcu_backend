@@ -3,7 +3,7 @@
 // caught once by handleHttpError - callers never format a response by hand.
 // Domain-specific errors (e.g. services/auth/auth.errors.ts) extend this
 // directly; the ones below are generic enough to reuse across any resource
-// route (items, admins, pricing-rules, ...).
+// route (items, admins, site settings, ...).
 export class HttpError extends Error {
 	statusCode: number;
 	clientMessage: string;

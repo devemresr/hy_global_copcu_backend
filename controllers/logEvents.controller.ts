@@ -28,7 +28,7 @@ function parseQuery(req: Request) {
 // of raw rows.
 const GROUP_BY_BATCH_OR_SELF = { $ifNull: ['$batchId', '$_id'] };
 
-// Items and pricing rules share one log_events collection (see LogEvent's
+// Items and site settings share one log_events collection (see LogEvent's
 // comment), so this lists across both rather than needing a route per entity.
 export const listLogEvents = async (req: Request, res: Response): Promise<void> => {
 	const log = logger.child({ method: 'listLogEvents' });
