@@ -4,6 +4,7 @@ export const API_BASE_PATHS = {
 	ADMINS: '/admins',
 	PRICING_RULES: '/pricing-rules',
 	LOG_EVENTS: '/log-events',
+	SITE: '/site',
 } as const;
 
 export const AUTH_ROUTES = {
@@ -19,6 +20,7 @@ export const ITEMS_ROUTES = {
 	// Registered before UPDATE in itemRoutes.ts - Express would otherwise match
 	// PATCH /items/bulk against /items/:id first, treating "bulk" as an id.
 	BULK_UPDATE: `${API_BASE_PATHS.ITEMS}/bulk`,
+	CHANGES: `${API_BASE_PATHS.ITEMS}/changes`,
 	UPDATE: `${API_BASE_PATHS.ITEMS}/:id`,
 	DELETE: `${API_BASE_PATHS.ITEMS}/:id`,
 } as const;
@@ -34,6 +36,12 @@ export const PRICING_RULES_ROUTES = {
 	CREATE: `${API_BASE_PATHS.PRICING_RULES}`,
 	UPDATE: `${API_BASE_PATHS.PRICING_RULES}/:id`,
 	DELETE: `${API_BASE_PATHS.PRICING_RULES}/:id`,
+} as const;
+
+export const SITE_ROUTES = {
+	STATUS: `${API_BASE_PATHS.SITE}/status`,
+	MAINTENANCE: `${API_BASE_PATHS.SITE}/maintenance`,
+	NOTICE: `${API_BASE_PATHS.SITE}/notice`,
 } as const;
 
 export const LOG_EVENTS_ROUTES = {

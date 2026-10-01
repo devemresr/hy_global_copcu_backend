@@ -36,6 +36,9 @@ export function createCachedFetcher<T>(
 ) {
 	let entry: CacheEntry<T> | null = null;
 	let inFlight: Promise<T> | null = null;
+	// Bumped by invalidate() so a fetch started before it can't cache its
+	// now-stale result.
+	let generation = 0;
 
 	const get = (): Promise<T> => {
 		if (entry && entry.expiresAt > Date.now()) {
@@ -43,14 +46,18 @@ export function createCachedFetcher<T>(
 		}
 
 		if (!inFlight) {
-			inFlight = fetchFn()
+			const startedAt = generation;
+			const request = fetchFn()
 				.then((value) => {
-					entry = { value, expiresAt: Date.now() + ttlMs };
+					if (startedAt === generation) {
+						entry = { value, expiresAt: Date.now() + ttlMs };
+					}
 					return value;
 				})
 				.finally(() => {
-					inFlight = null;
+					if (inFlight === request) inFlight = null;
 				});
+			inFlight = request;
 		}
 
 		return inFlight;
@@ -58,6 +65,8 @@ export function createCachedFetcher<T>(
 
 	const invalidate = () => {
 		entry = null;
+		inFlight = null;
+		generation++;
 	};
 
 	return { get, invalidate };

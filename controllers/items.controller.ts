@@ -11,6 +11,10 @@ import {
 } from '../schemas/item.schema';
 import { recordLogEvent } from '../services/logEvents/recordLogEvent.service';
 import { createCachedFetcher } from '../util/queryCache';
+import {
+	getVersion,
+	withVersionBump,
+} from '../services/sync/version.service';
 import { requireUserId } from './auth.helper';
 import { UnauthorizedError, NotFoundError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
@@ -23,9 +27,10 @@ const log = logger.child({ controller: 'items' });
 // anyway, so a longer window never serves stale data past an edit.
 const ITEMS_TTL_MS = 5 * 60 * 1000;
 
-const itemsCache = createCachedFetcher(() => Item.find().lean(), {
-	ttlMs: ITEMS_TTL_MS,
-});
+const itemsCache = createCachedFetcher(
+	() => Item.find({ deletedAt: null }).select('-deletedAt -__v').lean(),
+	{ ttlMs: ITEMS_TTL_MS },
+);
 
 // requirePermission/requireHeadAdmin always run before a mutating route
 // below and set both, so this narrows the optional Request fields once
@@ -43,13 +48,59 @@ function requireLogActor(req: Request): {
 	return { adminId, adminUsername: req.adminUsername };
 }
 
+// The version is read before the items, so the list is never older than the
+// version it's labelled with (an in-flight write can only make it newer).
 export const listItems = async (
-	_req: Request,
+	req: Request,
 	res: Response,
 ): Promise<void> => {
 	try {
+		const version = getVersion();
+		res.set('Cache-Control', 'no-cache');
+		res.set('ETag', `"items-${version}"`);
+		if (req.fresh) {
+			res.status(304).end();
+			return;
+		}
+
 		const items = await itemsCache.get();
-		res.status(200).json({ success: true, items });
+		res.status(200).json({ success: true, version, items });
+	} catch (error) {
+		handleHttpError(error, res, log);
+	}
+};
+
+/**
+ * GET /items/changes?since=N - everything written after version N. A `since`
+ * that's missing, invalid, or ahead of the server (the DB was reset) gets
+ * the full list back with `full: true` so the client replaces its copy.
+ */
+export const listItemChanges = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
+	try {
+		const version = getVersion();
+		const since = Number(req.query.since);
+		res.set('Cache-Control', 'no-store');
+
+		if (!Number.isInteger(since) || since < 0 || since > version) {
+			const items = await itemsCache.get();
+			res.status(200).json({ success: true, full: true, version, items });
+			return;
+		}
+
+		const changed = await Item.find({ version: { $gt: since } })
+			.select('-__v')
+			.lean();
+		const updated = changed
+			.filter((item) => !item.deletedAt)
+			.map(({ deletedAt: _deletedAt, ...item }) => item);
+		const deleted = changed
+			.filter((item) => item.deletedAt)
+			.map((item) => item._id.toString());
+
+		res.status(200).json({ success: true, full: false, version, updated, deleted });
 	} catch (error) {
 		handleHttpError(error, res, log);
 	}
@@ -63,8 +114,11 @@ export const createItem = async (
 		const actor = requireLogActor(req);
 		const fields: CreateItemInput = req.body;
 
-		const item = await Item.create(fields);
-		itemsCache.invalidate();
+		const item = await withVersionBump(async (version) => {
+			const created = await Item.create({ ...fields, version });
+			itemsCache.invalidate();
+			return created;
+		});
 
 		const changedFields: FieldChange[] = EDITABLE_ITEM_FIELDS.map((field) => ({
 			field,
@@ -78,6 +132,7 @@ export const createItem = async (
 			entityId: item._id.toString(),
 			entityKey: item.model,
 			fields: changedFields,
+			version: item.version,
 		});
 
 		res.status(201).json({ success: true, item: item.toObject() });
@@ -97,22 +152,27 @@ export const updateItem = async (
 		const actor = requireLogActor(req);
 		const update: UpdateItemInput = req.body;
 
-		const previous = await Item.findById(id).lean();
+		const previous = await Item.findOne({ _id: id, deletedAt: null }).lean();
 		if (!previous) {
 			throw new NotFoundError('Item');
 		}
 
-		const item = await Item.findByIdAndUpdate(id, update, {
-			new: true,
-			runValidators: true,
-		}).lean();
+		const item = await withVersionBump(async (version) => {
+			const updated = await Item.findOneAndUpdate(
+				{ _id: id, deletedAt: null },
+				{ ...update, version },
+				{ new: true, runValidators: true },
+			)
+				.select('-deletedAt -__v')
+				.lean();
+			// Guaranteed-fresh next read beats staying inside the TTL window.
+			itemsCache.invalidate();
+			return updated;
+		});
 
 		if (!item) {
 			throw new NotFoundError('Item');
 		}
-
-		// Guaranteed-fresh next read beats staying inside the TTL window.
-		itemsCache.invalidate();
 
 		// update only ever has keys that were actually sent (see updateItemSchema's
 		// .partial() - an omitted field is absent here, not present-as-undefined).
@@ -133,6 +193,7 @@ export const updateItem = async (
 				entityId: item._id.toString(),
 				entityKey: item.model,
 				fields: changedFields,
+				version: item.version,
 			});
 		}
 
@@ -157,15 +218,21 @@ export const bulkUpdateItems = async (
 		const actor = requireLogActor(req);
 		const { ids, fields }: BulkUpdateItemsInput = req.body;
 
-		const previousItems = await Item.find({ _id: { $in: ids } }).lean();
+		const previousItems = await Item.find({
+			_id: { $in: ids },
+			deletedAt: null,
+		}).lean();
 
-		const result = await Item.updateMany(
-			{ _id: { $in: ids } },
-			{ $set: fields },
-			{ runValidators: true },
-		);
-
-		itemsCache.invalidate();
+		// The whole batch shares one version.
+		const { result, version } = await withVersionBump(async (version) => {
+			const result = await Item.updateMany(
+				{ _id: { $in: ids }, deletedAt: null },
+				{ $set: { ...fields, version } },
+				{ runValidators: true },
+			);
+			itemsCache.invalidate();
+			return { result, version };
+		});
 
 		// One id shared by every row this request touches, so listLogEvents can
 		// fold them back into the single bulk event they came from instead of
@@ -191,6 +258,7 @@ export const bulkUpdateItems = async (
 					entityKey: previous.model,
 					fields: changedFields,
 					batchId,
+					version,
 				});
 			}),
 		);
@@ -214,13 +282,18 @@ export const deleteItem = async (
 
 	try {
 		const actor = requireLogActor(req);
-		const item = await Item.findByIdAndDelete(id).lean();
+		const { item, version } = await withVersionBump(async (version) => {
+			const item = await Item.findOneAndUpdate(
+				{ _id: id, deletedAt: null },
+				{ $set: { deletedAt: new Date(), version } },
+			).lean();
+			itemsCache.invalidate();
+			return { item, version };
+		});
 
 		if (!item) {
 			throw new NotFoundError('Item');
 		}
-
-		itemsCache.invalidate();
 
 		const changedFields: FieldChange[] = EDITABLE_ITEM_FIELDS.map((field) => ({
 			field,
@@ -234,6 +307,7 @@ export const deleteItem = async (
 			entityId: item._id.toString(),
 			entityKey: item.model,
 			fields: changedFields,
+			version,
 		});
 
 		res.status(200).json({ success: true });

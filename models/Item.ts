@@ -27,6 +27,11 @@ const itemSchema = new Schema<TimeStampedItem>(
 			required: true,
 			default: 'TRY',
 		},
+		// Global version of this item's last write - see
+		// services/sync/version.service.ts.
+		version: { type: Number, required: true, default: 0, index: true },
+		// Soft delete, so GET /items/changes can report a removal.
+		deletedAt: { type: Date, default: null },
 	},
 	{ timestamps: true, collection: 'items' },
 );
@@ -48,4 +53,6 @@ export type ItemData = {
 
 export type TimeStampedItem = DocumentWithTimestamps<ItemData> & {
 	_id: Types.ObjectId;
+	version: number;
+	deletedAt: Date | null;
 };

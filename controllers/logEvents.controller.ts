@@ -34,11 +34,13 @@ const GROUP_BY_BATCH_OR_SELF = { $ifNull: ['$batchId', '$_id'] };
 // comment), so this lists across both rather than needing a route per entity.
 export const listLogEvents = async (req: Request, res: Response): Promise<void> => {
 	try {
-		const { page, pageSize } = parseQuery(req);
+		const { page, pageSize, types } = parseQuery(req);
 		const skip = (page - 1) * pageSize;
+		const filter = types.length > 0 ? [{ $match: { entityType: { $in: types } } }] : [];
 
 		const [groupsPage, totalCount] = await Promise.all([
 			LogEvent.aggregate<{ events: unknown[]; latestCreatedAt: Date }>([
+				...filter,
 				{ $sort: { createdAt: -1 } },
 				{
 					$group: {
@@ -52,6 +54,7 @@ export const listLogEvents = async (req: Request, res: Response): Promise<void> 
 				{ $limit: pageSize },
 			]),
 			LogEvent.aggregate<{ total: number }>([
+				...filter,
 				{ $group: { _id: GROUP_BY_BATCH_OR_SELF } },
 				{ $count: 'total' },
 			]).then((result) => result[0]?.total ?? 0),

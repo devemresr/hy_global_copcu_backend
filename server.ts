@@ -2,6 +2,7 @@ import app from './app';
 import { connectDB } from './config/db';
 import { createServer, Server } from 'node:http';
 import env from './config/env';
+import { initVersionState } from './services/sync/version.service';
 
 const PORT = env.PORT;
 let shuttingDown = false;
@@ -11,6 +12,8 @@ export async function startServer(httpServer: Server): Promise<Server> {
 
 	await connectDB();
 	console.log('MongoDB connected');
+
+	await initVersionState();
 
 	await new Promise((resolve) => {
 		httpServer.listen(parseInt(PORT.toString()), '0.0.0.0', () => {

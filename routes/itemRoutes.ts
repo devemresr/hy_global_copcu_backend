@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
 	listItems,
+	listItemChanges,
 	createItem,
 	updateItem,
 	bulkUpdateItems,
@@ -16,11 +17,13 @@ import {
 } from '../schemas/item.schema';
 import { PERMISSIONS } from '../constants/permissions.constant';
 import { ITEMS_ROUTES } from './routes.constant';
+import { blockPublicDuringMaintenance } from '../middleware/maintenance.middleware';
 
 const router = () => {
 	const router = Router();
 
-	router.get(ITEMS_ROUTES.LIST, listItems);
+	router.get(ITEMS_ROUTES.LIST, blockPublicDuringMaintenance, listItems);
+	router.get(ITEMS_ROUTES.CHANGES, blockPublicDuringMaintenance, listItemChanges);
 	router.post(
 		ITEMS_ROUTES.CREATE,
 		...requireAuth(),

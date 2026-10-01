@@ -4,7 +4,13 @@ import { ACTIONS } from '../constants/permissions.constant';
 
 const { Schema } = mongoose;
 
-export const LOG_ACTIONS = ACTIONS;
+// Permission-gated actions plus site-settings changes, which are head-admin
+// only and so have no permission of their own.
+export const LOG_ACTIONS = {
+	...ACTIONS,
+	SITE_MAINTENANCE_UPDATE: 'site:maintenance_update',
+	SITE_NOTICE_UPDATE: 'site:notice_update',
+} as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
 
@@ -13,6 +19,8 @@ export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
 export const LOG_ENTITY_TYPES = {
 	ITEM: 'item',
 	PRICING_RULE: 'pricing_rule',
+	SITE_MAINTENANCE: 'site_maintenance',
+	SITE_NOTICE: 'site_notice',
 } as const;
 
 export type LogEntityType =
@@ -20,8 +28,8 @@ export type LogEntityType =
 
 export type FieldChange = {
 	field: string;
-	previousValue: string | number | null;
-	newValue: string | number | null;
+	previousValue: string | number | boolean | null;
+	newValue: string | number | boolean | null;
 };
 
 const fieldChangeSchema = new Schema<FieldChange>(
@@ -49,7 +57,8 @@ const logEventSchema = new Schema<TimeStampedLogEvent>(
 			enum: Object.values(LOG_ENTITY_TYPES),
 			required: true,
 		},
-		entityId: { type: Schema.Types.ObjectId, required: true },
+		// Null for site settings, which are a single document with no row id.
+		entityId: { type: Schema.Types.ObjectId, default: null },
 		// Human-readable identity at the time of the action - a delete leaves
 		// nothing left to join back to through entityId.
 		entityKey: { type: String, required: true },
@@ -59,6 +68,8 @@ const logEventSchema = new Schema<TimeStampedLogEvent>(
 		// listLogEvents group a bulk edit's N per-row entries back into the one
 		// event they actually came from instead of paginating over raw rows.
 		batchId: { type: String, default: null, index: true },
+		// The global data version this change was written at (items only).
+		version: { type: Number, default: null },
 	},
 	{ timestamps: true, collection: 'log_events' },
 );
@@ -73,10 +84,11 @@ export type LogEventData = {
 	adminUsername: string;
 	action: LogAction;
 	entityType: LogEntityType;
-	entityId: Types.ObjectId;
+	entityId: Types.ObjectId | null;
 	entityKey: string;
 	fields: FieldChange[];
 	batchId?: string | null;
+	version?: number | null;
 };
 
 export type TimeStampedLogEvent = DocumentWithTimestamps<LogEventData> & {

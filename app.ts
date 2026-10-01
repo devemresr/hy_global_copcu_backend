@@ -8,8 +8,8 @@ import { handleSanitization } from './middleware/handleSanitization.middleware';
 import authRoutes from './routes/authRoutes';
 import itemRoutes from './routes/itemRoutes';
 import adminRoutes from './routes/adminRoutes';
-import pricingRulesRoutes from './routes/pricingRulesRoutes';
 import logEventRoutes from './routes/logEventRoutes';
+import siteRoutes from './routes/siteRoutes';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 
 const app = express();
@@ -27,7 +27,7 @@ app.use(apiLimiter);
 app.use(authRoutes());
 app.use(itemRoutes());
 app.use(adminRoutes());
-app.use(pricingRulesRoutes());
 app.use(logEventRoutes());
+app.use(siteRoutes());
 
 export default app;

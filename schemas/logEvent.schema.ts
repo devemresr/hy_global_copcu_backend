@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LOG_ENTITY_TYPES } from '../models/LogEvent';
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -14,6 +15,12 @@ export const logEventsQuerySchema = z.object({
 		.max(MAX_PAGE_SIZE)
 		.optional()
 		.default(DEFAULT_PAGE_SIZE),
+	// Comma-separated entity types to include; omitted means all.
+	types: z
+		.string()
+		.optional()
+		.transform((value) => (value ? value.split(',') : []))
+		.pipe(z.array(z.enum(Object.values(LOG_ENTITY_TYPES) as [string, ...string[]]))),
 });
 
 export type LogEventsQuery = z.infer<typeof logEventsQuerySchema>;
