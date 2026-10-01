@@ -18,8 +18,6 @@ import { UnauthorizedError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';
 
-const log = logger.child({ controller: 'site' });
-
 const toDate = (value: string | null | undefined) => (value ? new Date(value) : null);
 
 // requireHeadAdmin always runs before these routes and sets adminUsername.
@@ -56,13 +54,16 @@ function diffSettings<T extends object>(previous: T, next: T): FieldChange[] {
  * `no-cache` lets the browser keep the body but forces it to revalidate.
  */
 export const getSiteStatus = (req: Request, res: Response): void => {
+	const log = logger.child({ method: 'getSiteStatus' });
 	const version = getVersion();
 	res.set('Cache-Control', 'no-cache');
 	res.set('ETag', `"${version}"`);
 	if (req.fresh) {
+		log.debug({ version }, 'Not modified');
 		res.status(304).end();
 		return;
 	}
+	log.debug({ version }, 'Site status requested');
 	res.status(200).json({
 		version,
 		maintenance: getMaintenance(),
@@ -74,9 +75,11 @@ export const updateMaintenance = async (
 	req: Request,
 	res: Response,
 ): Promise<void> => {
+	const log = logger.child({ method: 'updateMaintenance' });
 	try {
 		const actor = requireLogActor(req);
 		const { enabled, message, from, until }: UpdateMaintenanceInput = req.body;
+		log.debug({ adminId: actor.adminId, enabled, from, until }, 'Updating maintenance');
 		const previous = getMaintenance();
 		const maintenance = await setMaintenance({
 			enabled,
@@ -95,6 +98,12 @@ export const updateMaintenance = async (
 				fields,
 				version: getVersion(),
 			});
+			log.info(
+				{ adminId: actor.adminId, enabled: maintenance.enabled },
+				'Maintenance settings updated',
+			);
+		} else {
+			log.debug('No maintenance fields actually changed');
 		}
 		res.status(200).json({ success: true, version: getVersion(), maintenance });
 	} catch (error) {
@@ -103,9 +112,11 @@ export const updateMaintenance = async (
 };
 
 export const updateNotice = async (req: Request, res: Response): Promise<void> => {
+	const log = logger.child({ method: 'updateNotice' });
 	try {
 		const actor = requireLogActor(req);
 		const input: UpdateNoticeInput = req.body;
+		log.debug({ adminId: actor.adminId, enabled: input.enabled }, 'Updating notice');
 		const previous = getNotice();
 		const notice = await setNotice({
 			enabled: input.enabled,
@@ -127,6 +138,9 @@ export const updateNotice = async (req: Request, res: Response): Promise<void> =
 				fields,
 				version: getVersion(),
 			});
+			log.info({ adminId: actor.adminId, enabled: notice.enabled }, 'Notice updated');
+		} else {
+			log.debug('No notice fields actually changed');
 		}
 		res.status(200).json({ success: true, version: getVersion(), notice });
 	} catch (error) {

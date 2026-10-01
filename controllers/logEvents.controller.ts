@@ -6,8 +6,6 @@ import { handleHttpError } from '../errors/handleHttpError';
 import { formatZodError } from '../util/formatZodError';
 import logger from '../util/logger';
 
-const log = logger.child({ controller: 'logEvents' });
-
 // Query params can't go through validateBody.middleware.ts the way a POST/
 // PATCH body does - Express 5 makes req.query a getter, so reassigning it
 // the way validateBody reassigns req.body isn't safe. Parsed here instead.
@@ -33,8 +31,10 @@ const GROUP_BY_BATCH_OR_SELF = { $ifNull: ['$batchId', '$_id'] };
 // Items and pricing rules share one log_events collection (see LogEvent's
 // comment), so this lists across both rather than needing a route per entity.
 export const listLogEvents = async (req: Request, res: Response): Promise<void> => {
+	const log = logger.child({ method: 'listLogEvents' });
 	try {
 		const { page, pageSize, types } = parseQuery(req);
+		log.debug({ page, pageSize, types }, 'Listing log events');
 		const skip = (page - 1) * pageSize;
 		const filter = types.length > 0 ? [{ $match: { entityType: { $in: types } } }] : [];
 
@@ -61,6 +61,10 @@ export const listLogEvents = async (req: Request, res: Response): Promise<void> 
 		]);
 
 		const events = groupsPage.flatMap((group) => group.events);
+		log.debug(
+			{ page, pageSize, total: totalCount, returned: events.length },
+			'Log events listed',
+		);
 
 		res.status(200).json({
 			success: true,

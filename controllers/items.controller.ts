@@ -20,8 +20,6 @@ import { UnauthorizedError, NotFoundError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';
 
-const log = logger.child({ controller: 'items' });
-
 // Same 5 min TTL as queryCache's own usage example - the admin list is read
 // often but changes rarely, and every write below invalidates immediately
 // anyway, so a longer window never serves stale data past an edit.
@@ -54,16 +52,19 @@ export const listItems = async (
 	req: Request,
 	res: Response,
 ): Promise<void> => {
+	const log = logger.child({ method: 'listItems' });
 	try {
 		const version = getVersion();
 		res.set('Cache-Control', 'no-cache');
 		res.set('ETag', `"items-${version}"`);
 		if (req.fresh) {
+			log.debug({ version }, 'Not modified');
 			res.status(304).end();
 			return;
 		}
 
 		const items = await itemsCache.get();
+		log.debug({ version, count: items.length }, 'Items listed');
 		res.status(200).json({ success: true, version, items });
 	} catch (error) {
 		handleHttpError(error, res, log);
@@ -79,12 +80,14 @@ export const listItemChanges = async (
 	req: Request,
 	res: Response,
 ): Promise<void> => {
+	const log = logger.child({ method: 'listItemChanges' });
 	try {
 		const version = getVersion();
 		const since = Number(req.query.since);
 		res.set('Cache-Control', 'no-store');
 
 		if (!Number.isInteger(since) || since < 0 || since > version) {
+			log.debug({ since, version }, 'since missing/invalid/ahead, returning full list');
 			const items = await itemsCache.get();
 			res.status(200).json({ success: true, full: true, version, items });
 			return;
@@ -100,6 +103,10 @@ export const listItemChanges = async (
 			.filter((item) => item.deletedAt)
 			.map((item) => item._id.toString());
 
+		log.debug(
+			{ since, version, updated: updated.length, deleted: deleted.length },
+			'Item changes listed',
+		);
 		res.status(200).json({ success: true, full: false, version, updated, deleted });
 	} catch (error) {
 		handleHttpError(error, res, log);
@@ -110,9 +117,11 @@ export const createItem = async (
 	req: Request,
 	res: Response,
 ): Promise<void> => {
+	const log = logger.child({ method: 'createItem' });
 	try {
 		const actor = requireLogActor(req);
 		const fields: CreateItemInput = req.body;
+		log.debug({ adminId: actor.adminId, model: fields.model }, 'Creating item');
 
 		const item = await withVersionBump(async (version) => {
 			const created = await Item.create({ ...fields, version });
@@ -135,6 +144,10 @@ export const createItem = async (
 			version: item.version,
 		});
 
+		log.info(
+			{ adminId: actor.adminId, itemId: item._id.toString(), model: item.model },
+			'Item created',
+		);
 		res.status(201).json({ success: true, item: item.toObject() });
 	} catch (error) {
 		handleHttpError(error, res, log);
@@ -146,14 +159,16 @@ export const updateItem = async (
 	res: Response,
 ): Promise<void> => {
 	const { id } = req.params;
-	const scopedLog = log.child({ itemId: id });
+	const log = logger.child({ method: 'updateItem', itemId: id });
 
 	try {
 		const actor = requireLogActor(req);
 		const update: UpdateItemInput = req.body;
+		log.debug({ adminId: actor.adminId, update }, 'Updating item');
 
 		const previous = await Item.findOne({ _id: id, deletedAt: null }).lean();
 		if (!previous) {
+			log.warn('Item not found');
 			throw new NotFoundError('Item');
 		}
 
@@ -171,6 +186,7 @@ export const updateItem = async (
 		});
 
 		if (!item) {
+			log.warn('Item not found after update');
 			throw new NotFoundError('Item');
 		}
 
@@ -195,11 +211,17 @@ export const updateItem = async (
 				fields: changedFields,
 				version: item.version,
 			});
+			log.info(
+				{ adminId: actor.adminId, changedFields: changedFields.map((f) => f.field) },
+				'Item updated',
+			);
+		} else {
+			log.debug('No fields actually changed');
 		}
 
 		res.status(200).json({ success: true, item });
 	} catch (error) {
-		handleHttpError(error, res, scopedLog);
+		handleHttpError(error, res, log);
 	}
 };
 
@@ -214,9 +236,11 @@ export const bulkUpdateItems = async (
 	req: Request,
 	res: Response,
 ): Promise<void> => {
+	const log = logger.child({ method: 'bulkUpdateItems' });
 	try {
 		const actor = requireLogActor(req);
 		const { ids, fields }: BulkUpdateItemsInput = req.body;
+		log.debug({ adminId: actor.adminId, ids, fields }, 'Bulk updating items');
 
 		const previousItems = await Item.find({
 			_id: { $in: ids },
@@ -263,6 +287,24 @@ export const bulkUpdateItems = async (
 			}),
 		);
 
+		if (result.matchedCount === 0) {
+			// Most often stale ids: the client's list was captured before a
+			// delete/reseed, so none of the selected rows exist anymore.
+			log.warn(
+				{ adminId: actor.adminId, ids },
+				'Bulk update matched no items - ids are likely stale',
+			);
+		} else {
+			log.info(
+				{
+					adminId: actor.adminId,
+					matchedCount: result.matchedCount,
+					modifiedCount: result.modifiedCount,
+				},
+				'Items bulk updated',
+			);
+		}
+
 		res.status(200).json({
 			success: true,
 			matchedCount: result.matchedCount,
@@ -278,10 +320,12 @@ export const deleteItem = async (
 	res: Response,
 ): Promise<void> => {
 	const { id } = req.params;
-	const scopedLog = log.child({ itemId: id });
+	const log = logger.child({ method: 'deleteItem', itemId: id });
 
 	try {
 		const actor = requireLogActor(req);
+		log.debug({ adminId: actor.adminId }, 'Deleting item');
+
 		const { item, version } = await withVersionBump(async (version) => {
 			const item = await Item.findOneAndUpdate(
 				{ _id: id, deletedAt: null },
@@ -292,6 +336,7 @@ export const deleteItem = async (
 		});
 
 		if (!item) {
+			log.warn('Item not found');
 			throw new NotFoundError('Item');
 		}
 
@@ -310,8 +355,9 @@ export const deleteItem = async (
 			version,
 		});
 
+		log.info({ adminId: actor.adminId, model: item.model }, 'Item deleted');
 		res.status(200).json({ success: true });
 	} catch (error) {
-		handleHttpError(error, res, scopedLog);
+		handleHttpError(error, res, log);
 	}
 };
