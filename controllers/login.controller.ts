@@ -56,7 +56,7 @@ const login = async (req: Request, res: Response): Promise<void> => {
 
 		log.info({ userId: user._id.toString() }, 'User logged in');
 
-		issueAuthResponse(publicUser, res);
+		await issueAuthResponse(publicUser, res);
 	} catch (error: unknown) {
 		handleHttpError(error, res, log);
 	}

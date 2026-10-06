@@ -2,6 +2,7 @@ import { Router } from 'express';
 import login from '../controllers/login.controller';
 import { AUTH_ROUTES } from './routes.constant';
 import refresh from '../controllers/refresh.controller';
+import logout from '../controllers/logout.controller';
 import { loginLimiter } from '../middleware/rateLimit.middleware';
 import { validateBody } from '../middleware/validateBody.middleware';
 import { loginSchema } from '../schemas/auth.schema';
@@ -16,6 +17,7 @@ const router = () => {
 	);
 
 	router.post(AUTH_ROUTES.REFRESH, refresh);
+	router.post(AUTH_ROUTES.LOGOUT, logout);
 	return router;
 };
 

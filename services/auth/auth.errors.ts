@@ -13,7 +13,7 @@ export class MissingRefreshTokenError extends AuthError {
 }
 
 export class RevokedSessionError extends AuthError {
-	constructor(message = 'Refresh token jti found in the session blacklist') {
+	constructor(message = 'Refresh token session no longer exists') {
 		super(message, 401, 'Session has been revoked');
 	}
 }
@@ -39,6 +39,12 @@ export class MissingAccessTokenError extends AuthError {
 export class AccessTokenExpiredError extends AuthError {
 	constructor(message = 'Access token exp claim has passed, refresh required') {
 		super(message, 401, 'Access token expired');
+	}
+}
+
+export class InvalidAccessTokenError extends AuthError {
+	constructor(message = 'Access token failed signature/format verification') {
+		super(message, 401, 'Invalid access token');
 	}
 }
 

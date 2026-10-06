@@ -1,9 +1,14 @@
 // Decoded-token shape
-/** Minimal claims expected inside a valid refresh/access token. */
+/** Minimal claims expected inside a valid access token. */
 export interface TokenPayload {
 	userId: string;
 	email: string;
 	jti: string;
+}
+
+/** Refresh tokens also carry the Session document id they belong to. */
+export interface RefreshTokenPayload extends TokenPayload {
+	sid: string;
 }
 
 export type TokenType = 'refresh' | 'access';

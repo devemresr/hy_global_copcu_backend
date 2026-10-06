@@ -1,39 +1,31 @@
 import jwt from 'jsonwebtoken';
 const { JsonWebTokenError, TokenExpiredError } = jwt;
 import env from '../../config/env';
+import { JWT_ALGORITHM } from './constants/jwtConstants';
 import type { TokenPayload } from '../../util/token.helpers';
 
 export type VerifyTokenResult =
 	| { status: 'valid'; userId: string; jti: string }
-	| { status: 'refresh'; userId?: string }
+	| { status: 'refresh' }
 	| { status: 'invalid' };
 
-export const verifyAccessToken = async (
+export const verifyAccessToken = (
 	accessToken: string | null,
-): Promise<VerifyTokenResult> => {
+): VerifyTokenResult => {
 	if (!accessToken) {
 		return { status: 'refresh' };
 	}
 
 	try {
-		const decoded = jwt.verify(
-			accessToken,
-			env.ACCESS_TOKEN_SECRET,
-		) as TokenPayload;
+		const decoded = jwt.verify(accessToken, env.ACCESS_TOKEN_SECRET, {
+			algorithms: [JWT_ALGORITHM],
+		}) as TokenPayload;
 
 		return { status: 'valid', userId: decoded.userId, jti: decoded.jti };
 	} catch (error) {
-		if (
-			error instanceof TokenExpiredError ||
-			error instanceof JsonWebTokenError
-		) {
-			try {
-				const decoded = JSON.parse(atob(accessToken.split('.')[1]!));
-				return { status: 'refresh', userId: decoded?.userId };
-			} catch {
-				return { status: 'refresh' };
-			}
-		}
+		// TokenExpiredError extends JsonWebTokenError, so it has to be checked first.
+		if (error instanceof TokenExpiredError) return { status: 'refresh' };
+		if (error instanceof JsonWebTokenError) return { status: 'invalid' };
 		throw error;
 	}
 };

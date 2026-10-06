@@ -6,11 +6,16 @@ export const API_BASE_PATHS = {
 	SITE: '/site',
 } as const;
 
+// The refresh cookie's path - only routes under it ever receive the cookie.
+const AUTH_SESSION_PATH = `${API_BASE_PATHS.AUTH}/session`;
+
 export const AUTH_ROUTES = {
 	LOGIN: `${API_BASE_PATHS.AUTH}/login`,
 	REGISTER: `${API_BASE_PATHS.AUTH}/register`,
-	REFRESH: `${API_BASE_PATHS.AUTH}/refresh`,
 	UPDATE: `${API_BASE_PATHS.AUTH}/update`,
+	SESSION: AUTH_SESSION_PATH,
+	REFRESH: `${AUTH_SESSION_PATH}/refresh`,
+	LOGOUT: `${AUTH_SESSION_PATH}/logout`,
 } as const;
 
 export const ITEMS_ROUTES = {
