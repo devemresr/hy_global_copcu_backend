@@ -28,3 +28,10 @@ export const connectDB = (): Promise<typeof mongoose> => {
 
 	return connectionPromise;
 };
+
+/** Called once during graceful shutdown (server.ts). */
+export const disconnectDB = async (): Promise<void> => {
+	connectionPromise = null;
+	await mongoose.disconnect();
+	log.info('MongoDB disconnected');
+};

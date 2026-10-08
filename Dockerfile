@@ -8,6 +8,7 @@ RUN npm ci
 
 COPY . .
 
-EXPOSE 3001
+EXPOSE 3010
 
-CMD ["npx", "tsx", "server.ts"]
+# node as PID 1 (not npx/tsx wrappers) so SIGTERM reaches the shutdown handler.
+CMD ["node", "--import", "tsx", "server.ts"]
