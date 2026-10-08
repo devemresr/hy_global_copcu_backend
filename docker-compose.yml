@@ -1,9 +1,10 @@
+# Run through deploy/deploy.sh, which starts this as a blue or green compose
+# project and sets HOST_PORT for it.
 services:
   backend:
     build: .
-    container_name: hy-globalcopcu-backend
     env_file:
       - .env.prod
     ports:
-      - '3010:3010'
+      - '127.0.0.1:${HOST_PORT:?run via deploy/deploy.sh}:3010'
     restart: always

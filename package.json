@@ -7,6 +7,7 @@
     "dev": "tsx watch --env-file=.env.dev server.ts",
     "start": "tsx --env-file=.env.prod server.ts",
     "seed": "tsx --env-file=.env.prod local/seed.ts",
+    "reset-admin-credentials": "tsx --env-file=.env.prod local/resetAdminCredentials.ts",
     "typecheck": "tsc -b",
     "test": "vitest run"
   },
