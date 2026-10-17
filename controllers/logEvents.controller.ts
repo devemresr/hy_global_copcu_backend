@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
-import { LogEvent } from '../models/LogEvent';
+import { LogEvent, LOG_ENTITY_TYPES } from '../models/LogEvent';
+import type { PipelineStage } from 'mongoose';
 import { logEventsQuerySchema } from '../schemas/logEvent.schema';
 import { ValidationError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
@@ -33,10 +34,14 @@ const GROUP_BY_BATCH_OR_SELF = { $ifNull: ['$batchId', '$_id'] };
 export const listLogEvents = async (req: Request, res: Response): Promise<void> => {
 	const log = logger.child({ method: 'listLogEvents' });
 	try {
-		const { page, pageSize, types } = parseQuery(req);
-		log.debug({ page, pageSize, types }, 'Listing log events');
+		const { page, pageSize, types, model, caseSensitive } = parseQuery(req);
+		log.debug({ page, pageSize, types, model, caseSensitive }, 'Listing log events');
 		const skip = (page - 1) * pageSize;
-		const filter = types.length > 0 ? [{ $match: { entityType: { $in: types } } }] : [];
+		const filter: PipelineStage[] = types.length > 0 ? [{ $match: { entityType: { $in: types } } }] : [];
+		if (model) {
+			const escaped = model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			filter.push({ $match: { entityType: LOG_ENTITY_TYPES.ITEM, entityKey: caseSensitive ? model : { $regex: `^${escaped}$`, $options: 'i' } } });
+		}
 
 		const [groupsPage, totalCount] = await Promise.all([
 			LogEvent.aggregate<{ events: unknown[]; latestCreatedAt: Date }>([
