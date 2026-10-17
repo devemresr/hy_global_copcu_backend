@@ -28,6 +28,9 @@ describe('DELETE /items/bulk', () => {
 		const response = await request(app).delete(ITEMS_ROUTES.BULK_DELETE).set('Authorization', `Bearer ${token}`).send({ ids: [String(first._id), String(second._id), String(first._id), String(alreadyDeleted._id), missing] });
 		expect(response.status).toBe(200);
 		expect(response.body).toMatchObject({ success: true, matchedCount: 2, deletedCount: 2 });
+		expect(response.body.version).toBe(beforeVersion + 1);
+		expect(response.body.deletedIds.sort()).toEqual([String(first._id), String(second._id)].sort());
+		expect(getVersion()).toBe(beforeVersion + 1);
 		const changed = await Item.find({ _id: { $in: [first._id, second._id] } }).lean();
 		expect(changed.every((item) => item.deletedAt instanceof Date && item.version === beforeVersion + 1)).toBe(true);
 		expect((await Item.findById(untouched._id))?.deletedAt).toBeNull();

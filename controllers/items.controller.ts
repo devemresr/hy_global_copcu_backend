@@ -352,7 +352,7 @@ export const bulkDeleteItems = async (req: Request, res: Response): Promise<void
 			version,
 		})));
 		log.info({ adminId: actor.adminId, requestedCount: ids.length, deletedCount: deletedItems.length, batchId }, 'Items bulk deleted');
-		res.status(200).json({ success: true, matchedCount: deletedItems.length, deletedCount: deletedItems.length });
+		res.status(200).json({ success: true, matchedCount: deletedItems.length, deletedCount: deletedItems.length, deletedIds: deletedItems.map((item) => String(item._id)), version });
 	} catch (error) {
 		handleHttpError(error, res, log);
 	}
