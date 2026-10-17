@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isPowerOfTwo, STORAGE_POWER_WARNING } from '../util/storageSize';
 
 export const CURRENCY_VALUES = ['TRY', 'USD'] as const;
 export const currencySchema = z.enum(CURRENCY_VALUES);
@@ -18,7 +19,7 @@ export type StorageUnit = z.infer<typeof storageUnitSchema>;
 export const editableItemFieldsSchema = z.object({
 	model: z.string().trim().min(1, 'Model is required'),
 	bellekTipi: z.string().trim().min(1).nullable().optional(),
-	depolama: z.number().positive('depolama must be a positive number').nullable(),
+	depolama: z.number().positive('depolama must be a positive number').refine(isPowerOfTwo, STORAGE_POWER_WARNING).nullable(),
 	depolamaBirimi: storageUnitSchema,
 	ram: z.string().trim().min(1).nullable().optional(),
 	fiyat: z.number().nonnegative('fiyat must be a non-negative number').nullable(),

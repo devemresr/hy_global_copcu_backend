@@ -2,6 +2,7 @@ import mongoose, { Types } from 'mongoose';
 import type { DocumentWithTimestamps } from './User';
 import { CURRENCY_VALUES, STORAGE_UNIT_VALUES } from '../schemas/item.schema';
 import type { Currency, StorageUnit } from '../schemas/item.schema';
+import { isPowerOfTwo, STORAGE_POWER_WARNING } from '../util/storageSize';
 
 const { Schema } = mongoose;
 
@@ -13,7 +14,7 @@ const itemSchema = new Schema<TimeStampedItem>(
 		bellekTipi: { type: String, required: false },
 		sorgulananDeger: { type: String, required: false },
 		model: { type: String, required: true, index: true },
-		depolama: { type: Number, required: false, default: null },
+		depolama: { type: Number, required: false, default: null, validate: { validator: (value: number | null) => value == null || isPowerOfTwo(value), message: STORAGE_POWER_WARNING } },
 		depolamaBirimi: {
 			type: String,
 			enum: STORAGE_UNIT_VALUES,
