@@ -1,6 +1,7 @@
 export const API_BASE_PATHS = {
 	AUTH: '/auth',
 	ITEMS: '/items',
+	ITEM_RULES: '/item-rules',
 	ADMINS: '/admins',
 	LOG_EVENTS: '/log-events',
 	SITE: '/site',
@@ -36,6 +37,7 @@ export const ADMIN_ROUTES = {
 	UPDATE_PERMISSIONS: `${API_BASE_PATHS.ADMINS}/:id/permissions`,
 } as const;
 
+export const ITEM_RULE_ROUTES = { LIST: API_BASE_PATHS.ITEM_RULES, SAVE: API_BASE_PATHS.ITEM_RULES } as const;
 
 export const SITE_ROUTES = {
 	STATUS: `${API_BASE_PATHS.SITE}/status`,

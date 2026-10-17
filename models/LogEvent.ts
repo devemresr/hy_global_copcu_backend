@@ -18,6 +18,7 @@ export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
 // one log collection instead of growing a near-duplicate model per entity.
 export const LOG_ENTITY_TYPES = {
 	ITEM: 'item',
+	ITEM_RULE: 'item_rule',
 	SITE_MAINTENANCE: 'site_maintenance',
 	SITE_NOTICE: 'site_notice',
 } as const;
