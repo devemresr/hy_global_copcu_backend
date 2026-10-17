@@ -5,6 +5,7 @@ import {
 	createItem,
 	updateItem,
 	bulkUpdateItems,
+	bulkDeleteItems,
 	deleteItem,
 } from '../controllers/items.controller';
 import { requireAuth } from '../controllers/auth.helper';
@@ -14,6 +15,7 @@ import {
 	createItemSchema,
 	updateItemSchema,
 	bulkUpdateItemsSchema,
+	bulkDeleteItemsSchema,
 } from '../schemas/item.schema';
 import { PERMISSIONS } from '../constants/permissions.constant';
 import { ITEMS_ROUTES } from './routes.constant';
@@ -46,6 +48,14 @@ const router = () => {
 		requirePermission(PERMISSIONS.ITEMS_UPDATE),
 		validateBody(updateItemSchema),
 		updateItem,
+	);
+	// Register the static bulk path before DELETE /items/:id.
+	router.delete(
+		ITEMS_ROUTES.BULK_DELETE,
+		...requireAuth(),
+		requirePermission(PERMISSIONS.ITEMS_DELETE),
+		validateBody(bulkDeleteItemsSchema),
+		bulkDeleteItems,
 	);
 	router.delete(
 		ITEMS_ROUTES.DELETE,

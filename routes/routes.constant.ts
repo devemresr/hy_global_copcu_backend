@@ -24,6 +24,7 @@ export const ITEMS_ROUTES = {
 	// Registered before UPDATE in itemRoutes.ts - Express would otherwise match
 	// PATCH /items/bulk against /items/:id first, treating "bulk" as an id.
 	BULK_UPDATE: `${API_BASE_PATHS.ITEMS}/bulk`,
+	BULK_DELETE: `${API_BASE_PATHS.ITEMS}/bulk`,
 	CHANGES: `${API_BASE_PATHS.ITEMS}/changes`,
 	UPDATE: `${API_BASE_PATHS.ITEMS}/:id`,
 	DELETE: `${API_BASE_PATHS.ITEMS}/:id`,
@@ -34,6 +35,7 @@ export const ADMIN_ROUTES = {
 	CREATE: `${API_BASE_PATHS.ADMINS}`,
 	UPDATE_PERMISSIONS: `${API_BASE_PATHS.ADMINS}/:id/permissions`,
 } as const;
+
 
 export const SITE_ROUTES = {
 	STATUS: `${API_BASE_PATHS.SITE}/status`,

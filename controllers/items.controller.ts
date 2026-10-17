@@ -8,6 +8,7 @@ import {
 	type CreateItemInput,
 	type UpdateItemInput,
 	type BulkUpdateItemsInput,
+	type BulkDeleteItemsInput,
 } from '../schemas/item.schema';
 import { recordLogEvent } from '../services/logEvents/recordLogEvent.service';
 import { createCachedFetcher } from '../util/queryCache';
@@ -310,6 +311,48 @@ export const bulkUpdateItems = async (
 			matchedCount: result.matchedCount,
 			modifiedCount: result.modifiedCount,
 		});
+	} catch (error) {
+		handleHttpError(error, res, log);
+	}
+};
+
+/** Same soft-delete, version and audit behavior as deleteItem, one batch. */
+export const bulkDeleteItems = async (req: Request, res: Response): Promise<void> => {
+	const log = logger.child({ method: 'bulkDeleteItems' });
+	try {
+		const actor = requireLogActor(req);
+		const { ids }: BulkDeleteItemsInput = req.body;
+		const { deletedItems, version } = await withVersionBump(async (version) => {
+			// Read inside the write queue so concurrent server mutations cannot
+			// change the snapshot between selection and deletion.
+			const previousItems = await Item.find({ _id: { $in: ids }, deletedAt: null }).lean();
+			if (!previousItems.length) return { deletedItems: previousItems, version };
+			const selectedIds = previousItems.map((item) => item._id);
+			const deletedAt = new Date();
+			await Item.updateMany(
+				{ _id: { $in: selectedIds }, deletedAt: null },
+				{ $set: { deletedAt, version } },
+			);
+			itemsCache.invalidate();
+			// Only log rows actually changed by this request, including when an
+			// external process has already deleted one of the selected rows.
+			const changed = await Item.find({ _id: { $in: selectedIds }, deletedAt, version }).select('_id').lean();
+			const changedIds = new Set(changed.map((item) => item._id.toString()));
+			return { deletedItems: previousItems.filter((item) => changedIds.has(item._id.toString())), version };
+		});
+		const batchId = nanoid();
+		await Promise.all(deletedItems.map((item) => recordLogEvent({
+			...actor,
+			action: LOG_ACTIONS.ITEMS_DELETE,
+			entityType: LOG_ENTITY_TYPES.ITEM,
+			entityId: item._id.toString(),
+			entityKey: item.model,
+			fields: EDITABLE_ITEM_FIELDS.map((field) => ({ field, previousValue: item[field] ?? null, newValue: null })),
+			batchId,
+			version,
+		})));
+		log.info({ adminId: actor.adminId, requestedCount: ids.length, deletedCount: deletedItems.length, batchId }, 'Items bulk deleted');
+		res.status(200).json({ success: true, matchedCount: deletedItems.length, deletedCount: deletedItems.length });
 	} catch (error) {
 		handleHttpError(error, res, log);
 	}
