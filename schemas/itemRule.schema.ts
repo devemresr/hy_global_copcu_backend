@@ -5,13 +5,15 @@ const fields = ['model', 'bellekTipi', 'depolama', 'depolamaBirimi', 'fiyat', 'p
 const numberOps = ['equals', 'notEquals', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists'];
 const textOps = ['equals', 'notEquals', 'contains', 'in', 'notIn', 'exists', 'notExists'];
 const enumOps = ['equals', 'notEquals', 'exists', 'notExists'];
+const lengthOps = ['lengthEquals', 'lengthGt', 'lengthGte', 'lengthLt', 'lengthLte'];
 const conditionSchema = z.object({
 	field: z.enum(fields),
-	op: z.enum(['equals', 'notEquals', 'contains', 'in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists']),
+	op: z.enum(['equals', 'notEquals', 'contains', 'in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists', 'lengthEquals', 'lengthGt', 'lengthGte', 'lengthLt', 'lengthLte']),
 	value: z.string().max(10000),
 }).strict().superRefine((condition, context) => {
-	const allowed = ['depolama', 'fiyat'].includes(condition.field) ? numberOps : ['depolamaBirimi', 'paraBirimi'].includes(condition.field) ? enumOps : textOps;
+	const allowed = condition.field === 'model' ? [...textOps, ...lengthOps] : ['depolama', 'fiyat'].includes(condition.field) ? numberOps : ['depolamaBirimi', 'paraBirimi'].includes(condition.field) ? enumOps : textOps;
 	if (!allowed.includes(condition.op)) context.addIssue({ code: 'custom', message: 'Geçersiz filtre işleci' });
+	if (lengthOps.includes(condition.op) && (!/^\d+$/.test(condition.value.trim()) || !Number.isSafeInteger(Number(condition.value)))) context.addIssue({ code: 'custom', message: 'Karakter sayısı sıfır veya pozitif bir tam sayı olmalıdır' });
 	if (!['exists', 'notExists'].includes(condition.op) && !condition.value.trim()) context.addIssue({ code: 'custom', message: 'Filtre değeri boş olamaz' });
 });
 const actionSchema = z.object({ field: z.enum(fields), value: z.string().max(10000) }).strict().superRefine((action, context) => {

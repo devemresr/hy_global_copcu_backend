@@ -6,6 +6,7 @@ import { ItemRuleSet } from '../../models/ItemRuleSet';
 import { LogEvent } from '../../models/LogEvent';
 import { PERMISSIONS, type Permission } from '../../constants/permissions.constant';
 import { loginAndGetTokens, TEST_USER } from '../helpers';
+import { itemRuleSchema } from '../../schemas/itemRule.schema';
 
 const rule = { id: 'pa-price', name: 'PA fiyatı', enabled: true, conditions: [{ field: 'model', op: 'contains', value: 'pa' }], actions: [{ field: 'fiyat', value: '150' }] };
 async function auth(permissions: Permission[]) {
@@ -14,6 +15,12 @@ async function auth(permissions: Permission[]) {
 }
 
 describe('server item rules', () => {
+	it('accepts model-length conditions and rejects them for other fields or invalid lengths', () => {
+		const withLength = (field: string, value: string) => ({ ...rule, conditions: [{ field, op: 'lengthEquals', value }] });
+		expect(itemRuleSchema.safeParse(withLength('model', '3')).success).toBe(true);
+		expect(itemRuleSchema.safeParse(withLength('bellekTipi', '3')).success).toBe(false);
+		for (const value of ['', '-1', '1.5', 'abc']) expect(itemRuleSchema.safeParse(withLength('model', value)).success).toBe(false);
+	});
 	it('persists, edits, reorders and deletes rules, with audit records and revision checks', async () => {
 		const token = await auth([PERMISSIONS.ITEMS_ADD_RULE, PERMISSIONS.ITEMS_EDIT_RULE, PERMISSIONS.ITEMS_DELETE_RULE]);
 		const initial = await request(app).get('/item-rules').set('Authorization', token);
