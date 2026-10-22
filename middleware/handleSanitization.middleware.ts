@@ -11,7 +11,7 @@ export const handleSanitization = (
 		req.body = sanitize(req.body);
 	}
 	if (req.query && typeof req.query === 'object') {
-		const success = sanitizeQueryData(req, res); // Modifies existing object instead of
+		const success = sanitizeQueryData(req); // Modifies existing object instead of
 		// reassigning we should be able to do this in the mongo-sanitize library
 		// but because of a known issue we cant
 		if (!success) {

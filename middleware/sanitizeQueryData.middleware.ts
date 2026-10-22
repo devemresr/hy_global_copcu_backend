@@ -1,9 +1,9 @@
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import sanitizeAndDetect from './validateAndSanitize.middleware';
 import type { NestedObject } from '../express';
 import logger from '../util/logger';
 
-const sanitizeQueryData = (req: Request, res: Response): boolean => {
+const sanitizeQueryData = (req: Request): boolean => {
 	if (
 		req.query &&
 		typeof req.query === 'object' &&
