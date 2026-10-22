@@ -1,5 +1,6 @@
 type CacheEntry<T> = {
 	value: T;
+	cachedAt: number;
 	expiresAt: number;
 };
 
@@ -50,7 +51,8 @@ export function createCachedFetcher<T>(
 			const request = fetchFn()
 				.then((value) => {
 					if (startedAt === generation) {
-						entry = { value, expiresAt: Date.now() + ttlMs };
+						const cachedAt = Date.now();
+						entry = { value, cachedAt, expiresAt: cachedAt + ttlMs };
 					}
 					return value;
 				})
@@ -69,5 +71,11 @@ export function createCachedFetcher<T>(
 		generation++;
 	};
 
-	return { get, invalidate };
+	const getWithMetadata = async () => {
+		const source = entry && entry.expiresAt > Date.now() ? 'memory-cache' : inFlight ? 'shared-database-fetch' : 'database';
+		const value = await get();
+		return { value, source, cachedAt: entry?.cachedAt ?? null, expiresAt: entry?.expiresAt ?? null };
+	};
+
+	return { get, getWithMetadata, invalidate };
 }

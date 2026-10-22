@@ -19,7 +19,10 @@ export const connectDB = (): Promise<typeof mongoose> => {
 
 	if (!connectionPromise) {
 		log.info('Connecting to MongoDB');
-		connectionPromise = mongoose.connect(env.MONGODB_URI).catch((error) => {
+		connectionPromise = mongoose.connect(env.MONGODB_URI).then((connection) => {
+			log.info({ host: connection.connection.host, database: connection.connection.name }, 'MongoDB connection ready');
+			return connection;
+		}).catch((error) => {
 			connectionPromise = null;
 			log.error({ err: error }, 'MongoDB connection failed');
 			throw error;

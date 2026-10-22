@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { nanoid } from 'nanoid';
+import { createHash } from 'node:crypto';
 import { Item } from '../models/Item';
 import { LOG_ACTIONS, LOG_ENTITY_TYPES } from '../models/LogEvent';
 import type { FieldChange } from '../models/LogEvent';
@@ -27,7 +28,10 @@ import logger from '../util/logger';
 const ITEMS_TTL_MS = 5 * 60 * 1000;
 
 const itemsCache = createCachedFetcher(
-	() => Item.find({ deletedAt: null }).select('-deletedAt -__v').lean(),
+	async () => {
+		const items = await Item.find({ deletedAt: null }).select('-deletedAt -__v').sort({ _id: 1 }).lean();
+		return { items, fingerprint: createHash('sha256').update(JSON.stringify(items)).digest('hex') };
+	},
 	{ ttlMs: ITEMS_TTL_MS },
 );
 
@@ -56,16 +60,23 @@ export const listItems = async (
 	const log = logger.child({ method: 'listItems' });
 	try {
 		const version = getVersion();
+		const { value: { items, fingerprint }, source, cachedAt, expiresAt } = await itemsCache.getWithMetadata();
+		const cacheDetails = { source, cachedAt: cachedAt ? new Date(cachedAt).toISOString() : null, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null, cacheAgeMs: cachedAt ? Date.now() - cachedAt : null };
 		res.set('Cache-Control', 'no-cache');
-		res.set('ETag', `"items-${version}"`);
+		// A seed can reset version to zero. Data identity must also participate
+		// so an old empty response cannot validate against a populated database.
+		res.set('ETag', `"items-${version}-${fingerprint}"`);
+		if (items.length === 0) {
+			itemsCache.invalidate();
+			log.warn({ version, ...cacheDetails, database: Item.db.name, collection: Item.collection.name }, 'Items query returned no active items; empty result will not be retained in cache');
+		}
 		if (req.fresh) {
-			log.debug({ version }, 'Not modified');
+			log.info({ version, count: items.length, ...cacheDetails, responseSource: 'browser-http-cache' }, 'Items HTTP cache revalidated (304)');
 			res.status(304).end();
 			return;
 		}
 
-		const items = await itemsCache.get();
-		log.debug({ version, count: items.length }, 'Items listed');
+		log.info({ version, count: items.length, ...cacheDetails, database: Item.db.name, collection: Item.collection.name }, 'Items served (200)');
 		res.status(200).json({ success: true, version, items });
 	} catch (error) {
 		handleHttpError(error, res, log);
@@ -89,7 +100,9 @@ export const listItemChanges = async (
 
 		if (!Number.isInteger(since) || since < 0 || since > version) {
 			log.debug({ since, version }, 'since missing/invalid/ahead, returning full list');
-			const items = await itemsCache.get();
+			const { value: { items }, source, cachedAt, expiresAt } = await itemsCache.getWithMetadata();
+			if (items.length === 0) itemsCache.invalidate();
+			log.info({ since, version, count: items.length, source, cachedAt, expiresAt }, 'Full items list served for delta reset');
 			res.status(200).json({ success: true, full: true, version, items });
 			return;
 		}
@@ -104,7 +117,7 @@ export const listItemChanges = async (
 			.filter((item) => item.deletedAt)
 			.map((item) => item._id.toString());
 
-		log.debug(
+		log.info(
 			{ since, version, updated: updated.length, deleted: deleted.length },
 			'Item changes listed',
 		);
