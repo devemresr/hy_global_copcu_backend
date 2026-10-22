@@ -3,12 +3,12 @@ import { editableItemFieldsSchema } from './item.schema';
 
 const fields = ['model', 'bellekTipi', 'depolama', 'depolamaBirimi', 'fiyat', 'paraBirimi'] as const;
 const numberOps = ['equals', 'notEquals', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists'];
-const textOps = ['equals', 'notEquals', 'contains', 'in', 'notIn', 'exists', 'notExists'];
+const textOps = ['equals', 'notEquals', 'contains', 'notContains', 'in', 'notIn', 'exists', 'notExists'];
 const enumOps = ['equals', 'notEquals', 'exists', 'notExists'];
 const lengthOps = ['lengthEquals', 'lengthGt', 'lengthGte', 'lengthLt', 'lengthLte'];
 const conditionSchema = z.object({
 	field: z.enum(fields),
-	op: z.enum(['equals', 'notEquals', 'contains', 'in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists', 'lengthEquals', 'lengthGt', 'lengthGte', 'lengthLt', 'lengthLte']),
+	op: z.enum(['equals', 'notEquals', 'contains', 'notContains', 'in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists', 'lengthEquals', 'lengthGt', 'lengthGte', 'lengthLt', 'lengthLte']),
 	value: z.string().max(10000),
 }).strict().superRefine((condition, context) => {
 	const allowed = condition.field === 'model' ? [...textOps, ...lengthOps] : ['depolama', 'fiyat'].includes(condition.field) ? numberOps : ['depolamaBirimi', 'paraBirimi'].includes(condition.field) ? enumOps : textOps;

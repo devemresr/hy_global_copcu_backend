@@ -10,6 +10,26 @@ import { handleHttpError } from '../errors/handleHttpError';
 import { recordLogEvent } from '../services/logEvents/recordLogEvent.service';
 import type { SaveItemRulesInput, ItemRuleData } from '../schemas/itemRule.schema';
 import logger from '../util/logger';
+import { Item } from '../models/Item';
+import { resolveItemRuleDetails } from '../services/items/resolveItemRules';
+
+/** Public price classifications only; rule conditions and administration stay private. */
+export async function listCustomerPriceRules(_req: Request, res: Response): Promise<void> {
+	const log = logger.child({ method: 'listCustomerPriceRules' });
+	try {
+		const saved = await ItemRuleSet.findById(ITEM_RULE_SET_ID).lean();
+		const rules = saved?.rules ?? [];
+		const items = rules.some((rule) => rule.enabled && rule.actions.some((action) => action.field === 'fiyat'))
+			? await Item.find({ deletedAt: null }).lean() : [];
+		const assignments = items.flatMap((item) => {
+			const resolved = resolveItemRuleDetails(item, {}, rules);
+			const source = resolved.sources.fiyat;
+			return source ? [{ key: JSON.stringify([item.model, item.bellekTipi, item.depolama, item.depolamaBirimi, item.paraBirimi]), ruleId: source.id, ruleName: source.name, rulePrice: resolved.fields.fiyat ?? null }] : [];
+		});
+		res.set('Cache-Control', 'no-store');
+		res.json({ success: true, revision: saved?.revision ?? 0, assignments });
+	} catch (error) { handleHttpError(error, res, log); }
+}
 
 async function actor(req: Request) {
 	const user = await User.findById(requireUserId(req)).select('username role permissions').lean();

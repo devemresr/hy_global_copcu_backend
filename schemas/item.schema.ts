@@ -46,6 +46,7 @@ export const updateItemSchema = editableItemFieldsSchema.partial();
 // conditions could in principle match far more rows than anyone actually
 // means to touch in one request.
 export const bulkUpdateItemsSchema = z.object({
+	ruleOverrideRevision: z.number().int().nonnegative().optional(),
 	ids: z
 		.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid item id'))
 		.min(1, 'At least one item id is required')

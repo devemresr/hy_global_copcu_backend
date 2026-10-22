@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import { nanoid } from 'nanoid';
 import { createHash } from 'node:crypto';
 import { Item } from '../models/Item';
+import { ItemRuleSet, ITEM_RULE_SET_ID } from '../models/ItemRuleSet';
+import { resolveBulkItemRules } from '../services/items/resolveItemRules';
 import { LOG_ACTIONS, LOG_ENTITY_TYPES } from '../models/LogEvent';
 import type { FieldChange } from '../models/LogEvent';
 import {
@@ -18,7 +20,7 @@ import {
 	withVersionBump,
 } from '../services/sync/version.service';
 import { requireUserId } from './auth.helper';
-import { UnauthorizedError, NotFoundError } from '../errors/HttpError';
+import { UnauthorizedError, NotFoundError, ConflictError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';
 
@@ -239,13 +241,7 @@ export const updateItem = async (
 	}
 };
 
-// BulkEditPanel used to fire one PATCH per matched row (Promise.allSettled
-// client-side) - same end result, but N round trips and N separate write
-// commands instead of one. Every matched id gets the exact same `fields`
-// here, so a single updateMany's one filter/one $set covers it; bulkWrite is
-// the right call only when different documents need different updates in
-// one round trip, which isn't the case for "set this field to this value on
-// every matched row".
+// Rule conflicts require explicit approval before any row in the batch changes.
 export const bulkUpdateItems = async (
 	req: Request,
 	res: Response,
@@ -253,23 +249,26 @@ export const bulkUpdateItems = async (
 	const log = logger.child({ method: 'bulkUpdateItems' });
 	try {
 		const actor = requireLogActor(req);
-		const { ids, fields }: BulkUpdateItemsInput = req.body;
+		const { ids, fields, ruleOverrideRevision }: BulkUpdateItemsInput = req.body;
 		log.debug({ adminId: actor.adminId, ids, fields }, 'Bulk updating items');
 
-		const previousItems = await Item.find({
-			_id: { $in: ids },
-			deletedAt: null,
-		}).lean();
-
-		// The whole batch shares one version.
-		const { result, version } = await withVersionBump(async (version) => {
-			const result = await Item.updateMany(
-				{ _id: { $in: ids }, deletedAt: null },
-				{ $set: { ...fields, version } },
-				{ runValidators: true },
-			);
+		const { result, version, updates } = await withVersionBump(async (version) => {
+			const previousItems = await Item.find({ _id: { $in: ids }, deletedAt: null }).lean();
+			const ruleSet = await ItemRuleSet.findById(ITEM_RULE_SET_ID).lean();
+			const hasConflicts = previousItems.some((previous) => {
+				const resolved = resolveBulkItemRules(previous, fields, ruleSet?.rules ?? []);
+				return (Object.keys(fields) as (keyof UpdateItemInput)[]).some((field) => resolved[field] !== fields[field]);
+			});
+			if (hasConflicts && ruleOverrideRevision !== (ruleSet?.revision ?? 0)) {
+				throw new ConflictError('Bu değişiklik ürün kurallarıyla çelişiyor. Kuralları yenileyip kural uyarısını onaylayın.');
+			}
+			// Approval saves the requested fields exactly; rules remain unchanged.
+			const updates = previousItems.map((previous) => ({ previous, fields }));
+			const result = updates.length ? await Item.bulkWrite(updates.map(({ previous, fields: resolved }) => ({
+				updateOne: { filter: { _id: previous._id, deletedAt: null }, update: { $set: { ...resolved, version } } },
+			}))) : { matchedCount: 0, modifiedCount: 0 };
 			itemsCache.invalidate();
-			return { result, version };
+			return { result, version, updates };
 		});
 
 		// One id shared by every row this request touches, so listLogEvents can
@@ -277,9 +276,9 @@ export const bulkUpdateItems = async (
 		// paginating over N indistinguishable per-row entries (see LogEvent
 		// model's own comment on batchId).
 		const batchId = nanoid();
-		const changedFieldKeys = Object.keys(fields) as (keyof UpdateItemInput)[];
 		await Promise.all(
-			previousItems.map((previous) => {
+			updates.map(({ previous, fields }) => {
+				const changedFieldKeys = Object.keys(fields) as (keyof UpdateItemInput)[];
 				const changedFields: FieldChange[] = changedFieldKeys
 					.filter((field) => fields[field] !== (previous[field] ?? null))
 					.map((field) => ({

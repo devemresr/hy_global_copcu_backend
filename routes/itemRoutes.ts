@@ -20,12 +20,14 @@ import {
 import { PERMISSIONS } from '../constants/permissions.constant';
 import { ITEMS_ROUTES } from './routes.constant';
 import { blockPublicDuringMaintenance } from '../middleware/maintenance.middleware';
+import { listCustomerPriceRules } from '../controllers/itemRules.controller';
 
 const router = () => {
 	const router = Router();
 
 	router.get(ITEMS_ROUTES.LIST, blockPublicDuringMaintenance, listItems);
 	router.get(ITEMS_ROUTES.CHANGES, blockPublicDuringMaintenance, listItemChanges);
+	router.get(`${ITEMS_ROUTES.LIST}/price-rules`, blockPublicDuringMaintenance, listCustomerPriceRules);
 	router.post(
 		ITEMS_ROUTES.CREATE,
 		...requireAuth(),
