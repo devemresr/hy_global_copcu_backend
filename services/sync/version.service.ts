@@ -23,6 +23,7 @@ import type {
 	MaintenanceState,
 	NoticeState,
 	Schedule,
+	PromotionState,
 } from '../../models/AppState';
 import { Item } from '../../models/Item';
 import logger from '../../util/logger';
@@ -47,6 +48,8 @@ const DEFAULT_NOTICE: NoticeState = {
 };
 
 let committedVersion = 0;
+const DEFAULT_PROMOTION: PromotionState = { enabled: true, showEveryVisit: false, brandLabel: null, title: null, tagline: null, description: null };
+let promotion = DEFAULT_PROMOTION;
 let maintenance = DEFAULT_MAINTENANCE;
 let notice = DEFAULT_NOTICE;
 let writeQueue: Promise<unknown> = Promise.resolve();
@@ -68,10 +71,11 @@ export async function initVersionState(): Promise<void> {
 	// Spread over defaults so fields added later get a value.
 	maintenance = { ...DEFAULT_MAINTENANCE, ...state?.maintenance };
 	notice = { ...DEFAULT_NOTICE, ...state?.notice };
+	promotion = { ...DEFAULT_PROMOTION, ...state?.promotion };
 
 	await AppState.updateOne(
 		{ _id: APP_STATE_ID },
-		{ $set: { version: committedVersion, maintenance, notice } },
+		{ $set: { version: committedVersion, maintenance, notice, promotion } },
 		{ upsert: true },
 	);
 	log.info({ version: committedVersion }, 'Version state loaded');
@@ -79,6 +83,16 @@ export async function initVersionState(): Promise<void> {
 
 export function getVersion(): number {
 	return committedVersion;
+}
+
+export function getPromotion(): PromotionState { return promotion; }
+
+export function setPromotion(next: PromotionState): Promise<PromotionState> {
+	return withVersionBump(async () => {
+		await AppState.updateOne({ _id: APP_STATE_ID }, { $set: { promotion: next } }, { upsert: true });
+		promotion = next;
+		return next;
+	});
 }
 
 export function getMaintenance(): MaintenanceState {

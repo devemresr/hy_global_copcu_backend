@@ -9,6 +9,8 @@ import {
 	getVersion,
 	setMaintenance,
 	setNotice,
+	getPromotion,
+	setPromotion,
 } from '../services/sync/version.service';
 import { LOG_ACTIONS, LOG_ENTITY_TYPES } from '../models/LogEvent';
 import type { FieldChange } from '../models/LogEvent';
@@ -68,7 +70,24 @@ export const getSiteStatus = (req: Request, res: Response): void => {
 		version,
 		maintenance: getMaintenance(),
 		notice: getNotice(),
+		promotion: getPromotion(),
 	});
+};
+
+export const updatePromotion = async (req: Request, res: Response): Promise<void> => {
+	const log = logger.child({ method: 'updatePromotion' });
+	try {
+		const actor = requireLogActor(req);
+		const previous = getPromotion();
+		const promotion = await setPromotion(req.body);
+		const fields = diffSettings(previous, promotion);
+		if (fields.length) await recordLogEvent({
+			...actor, action: LOG_ACTIONS.SITE_PROMOTION_UPDATE,
+			entityType: LOG_ENTITY_TYPES.SITE_PROMOTION, entityId: null,
+			entityKey: 'promotion', fields, version: getVersion(),
+		});
+		res.status(200).json({ success: true, version: getVersion(), promotion });
+	} catch (error) { handleHttpError(error, res, log); }
 };
 
 export const updateMaintenance = async (

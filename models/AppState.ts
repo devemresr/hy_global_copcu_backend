@@ -34,7 +34,26 @@ export type AppStateData = {
 	version: number;
 	maintenance: MaintenanceState;
 	notice: NoticeState;
+	promotion: PromotionState;
 };
+
+export type PromotionState = {
+	brandLabel: string | null;
+	enabled: boolean;
+	showEveryVisit: boolean;
+	title: string | null;
+	tagline: string | null;
+	description: string | null;
+};
+
+const promotionSchema = new Schema<PromotionState>({
+	brandLabel: { type: String, default: null },
+	enabled: { type: Boolean, default: true },
+	showEveryVisit: { type: Boolean, default: false },
+	title: { type: String, default: null },
+	tagline: { type: String, default: null },
+	description: { type: String, default: null },
+}, { _id: false });
 
 const scheduleFields = {
 	enabled: { type: Boolean, required: true, default: false },
@@ -66,6 +85,7 @@ const appStateSchema = new Schema<AppStateData>(
 	{
 		_id: { type: String, required: true },
 		version: { type: Number, required: true, default: 0 },
+		promotion: { type: promotionSchema, required: true, default: () => ({}) },
 		maintenance: {
 			type: maintenanceSchema,
 			required: true,

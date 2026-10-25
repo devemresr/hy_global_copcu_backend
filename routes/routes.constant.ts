@@ -40,6 +40,7 @@ export const ADMIN_ROUTES = {
 export const ITEM_RULE_ROUTES = { LIST: API_BASE_PATHS.ITEM_RULES, SAVE: API_BASE_PATHS.ITEM_RULES } as const;
 
 export const SITE_ROUTES = {
+	PROMOTION: `${API_BASE_PATHS.SITE}/promotion`,
 	STATUS: `${API_BASE_PATHS.SITE}/status`,
 	MAINTENANCE: `${API_BASE_PATHS.SITE}/maintenance`,
 	NOTICE: `${API_BASE_PATHS.SITE}/notice`,

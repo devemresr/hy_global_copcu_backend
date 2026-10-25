@@ -36,3 +36,12 @@ export const updateNoticeSchema = scheduleSchema
 
 export type UpdateMaintenanceInput = z.infer<typeof updateMaintenanceSchema>;
 export type UpdateNoticeInput = z.infer<typeof updateNoticeSchema>;
+
+export const updatePromotionSchema = z.object({
+	brandLabel: z.string().trim().min(1).max(120).nullable().default(null),
+	enabled: z.boolean(),
+	showEveryVisit: z.boolean(),
+	title: z.string().trim().min(1).max(160).nullable(),
+	tagline: z.string().trim().min(1).max(120).nullable(),
+	description: z.string().trim().min(1).max(1000).nullable(),
+}).strict();

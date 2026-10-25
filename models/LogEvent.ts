@@ -10,6 +10,7 @@ export const LOG_ACTIONS = {
 	...ACTIONS,
 	SITE_MAINTENANCE_UPDATE: 'site:maintenance_update',
 	SITE_NOTICE_UPDATE: 'site:notice_update',
+	SITE_PROMOTION_UPDATE: 'site:promotion_update',
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
@@ -21,6 +22,7 @@ export const LOG_ENTITY_TYPES = {
 	ITEM_RULE: 'item_rule',
 	SITE_MAINTENANCE: 'site_maintenance',
 	SITE_NOTICE: 'site_notice',
+	SITE_PROMOTION: 'site_promotion',
 } as const;
 
 export type LogEntityType =
