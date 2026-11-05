@@ -9,7 +9,12 @@ import { loginAndGetTokens } from '../helpers';
 describe('exact model log search', () => {
 	it('matches the whole model literally, supports case sensitivity, and filters before grouping', async () => {
 		const adminId = new mongoose.Types.ObjectId();
-		const base = { adminId, adminUsername: 'tester', action: LOG_ACTIONS.ITEMS_UPDATE, entityType: LOG_ENTITY_TYPES.ITEM };
+		const base = {
+			adminId,
+			adminUsername: 'tester',
+			action: LOG_ACTIONS.ITEMS_UPDATE,
+			entityType: LOG_ENTITY_TYPES.ITEM,
+		};
 		await LogEvent.create([
 			{ ...base, entityKey: 'PA[1].+', batchId: 'batch' },
 			{ ...base, entityKey: 'OTHER', batchId: 'batch' },
@@ -18,11 +23,19 @@ describe('exact model log search', () => {
 			{ ...base, entityKey: 'PA[1].+', entityType: LOG_ENTITY_TYPES.ITEM_RULE },
 		]);
 		const { accessToken } = await loginAndGetTokens();
-		const search = (query: Record<string, string | number>) => request(app).get(LOG_EVENTS_ROUTES.LIST).set('Authorization', `Bearer ${accessToken}`).query(query);
+		const search = (query: Record<string, string | number>) =>
+			request(app)
+				.get(LOG_EVENTS_ROUTES.LIST)
+				.set('Authorization', `Bearer ${accessToken}`)
+				.query(query);
 		const insensitive = await search({ model: 'PA[1].+' });
 		expect(insensitive.status).toBe(200);
 		expect(insensitive.body.total).toBe(2);
-		expect(insensitive.body.events.map((event: { entityKey: string }) => event.entityKey).sort()).toEqual(['PA[1].+', 'pa[1].+']);
+		expect(
+			insensitive.body.events
+				.map((event: { entityKey: string }) => event.entityKey)
+				.sort(),
+		).toEqual(['PA[1].+', 'pa[1].+']);
 		const sensitive = await search({ model: 'PA[1].+', caseSensitive: 'true' });
 		expect(sensitive.body.total).toBe(1);
 		expect(sensitive.body.events).toHaveLength(1);

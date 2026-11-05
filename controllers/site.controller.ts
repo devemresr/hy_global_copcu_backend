@@ -20,10 +20,14 @@ import { UnauthorizedError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';
 
-const toDate = (value: string | null | undefined) => (value ? new Date(value) : null);
+const toDate = (value: string | null | undefined) =>
+	value ? new Date(value) : null;
 
 // requireHeadAdmin always runs before these routes and sets adminUsername.
-function requireLogActor(req: Request): { adminId: string; adminUsername: string } {
+function requireLogActor(req: Request): {
+	adminId: string;
+	adminUsername: string;
+} {
 	const adminId = requireUserId(req);
 	if (!req.adminUsername) {
 		throw new UnauthorizedError(
@@ -74,20 +78,30 @@ export const getSiteStatus = (req: Request, res: Response): void => {
 	});
 };
 
-export const updatePromotion = async (req: Request, res: Response): Promise<void> => {
+export const updatePromotion = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
 	const log = logger.child({ method: 'updatePromotion' });
 	try {
 		const actor = requireLogActor(req);
 		const previous = getPromotion();
 		const promotion = await setPromotion(req.body);
 		const fields = diffSettings(previous, promotion);
-		if (fields.length) await recordLogEvent({
-			...actor, action: LOG_ACTIONS.SITE_PROMOTION_UPDATE,
-			entityType: LOG_ENTITY_TYPES.SITE_PROMOTION, entityId: null,
-			entityKey: 'promotion', fields, version: getVersion(),
-		});
+		if (fields.length)
+			await recordLogEvent({
+				...actor,
+				action: LOG_ACTIONS.SITE_PROMOTION_UPDATE,
+				entityType: LOG_ENTITY_TYPES.SITE_PROMOTION,
+				entityId: null,
+				entityKey: 'promotion',
+				fields,
+				version: getVersion(),
+			});
 		res.status(200).json({ success: true, version: getVersion(), promotion });
-	} catch (error) { handleHttpError(error, res, log); }
+	} catch (error) {
+		handleHttpError(error, res, log);
+	}
 };
 
 export const updateMaintenance = async (
@@ -98,7 +112,10 @@ export const updateMaintenance = async (
 	try {
 		const actor = requireLogActor(req);
 		const { enabled, message, from, until }: UpdateMaintenanceInput = req.body;
-		log.debug({ adminId: actor.adminId, enabled, from, until }, 'Updating maintenance');
+		log.debug(
+			{ adminId: actor.adminId, enabled, from, until },
+			'Updating maintenance',
+		);
 		const previous = getMaintenance();
 		const maintenance = await setMaintenance({
 			enabled,
@@ -130,12 +147,18 @@ export const updateMaintenance = async (
 	}
 };
 
-export const updateNotice = async (req: Request, res: Response): Promise<void> => {
+export const updateNotice = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
 	const log = logger.child({ method: 'updateNotice' });
 	try {
 		const actor = requireLogActor(req);
 		const input: UpdateNoticeInput = req.body;
-		log.debug({ adminId: actor.adminId, enabled: input.enabled }, 'Updating notice');
+		log.debug(
+			{ adminId: actor.adminId, enabled: input.enabled },
+			'Updating notice',
+		);
 		const previous = getNotice();
 		const notice = await setNotice({
 			enabled: input.enabled,
@@ -157,7 +180,10 @@ export const updateNotice = async (req: Request, res: Response): Promise<void> =
 				fields,
 				version: getVersion(),
 			});
-			log.info({ adminId: actor.adminId, enabled: notice.enabled }, 'Notice updated');
+			log.info(
+				{ adminId: actor.adminId, enabled: notice.enabled },
+				'Notice updated',
+			);
 		} else {
 			log.debug('No notice fields actually changed');
 		}

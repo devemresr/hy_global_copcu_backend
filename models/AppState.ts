@@ -46,14 +46,17 @@ export type PromotionState = {
 	description: string | null;
 };
 
-const promotionSchema = new Schema<PromotionState>({
-	brandLabel: { type: String, default: null },
-	enabled: { type: Boolean, default: true },
-	showEveryVisit: { type: Boolean, default: false },
-	title: { type: String, default: null },
-	tagline: { type: String, default: null },
-	description: { type: String, default: null },
-}, { _id: false });
+const promotionSchema = new Schema<PromotionState>(
+	{
+		brandLabel: { type: String, default: null },
+		enabled: { type: Boolean, default: true },
+		showEveryVisit: { type: Boolean, default: false },
+		title: { type: String, default: null },
+		tagline: { type: String, default: null },
+		description: { type: String, default: null },
+	},
+	{ _id: false },
+);
 
 const scheduleFields = {
 	enabled: { type: Boolean, required: true, default: false },
@@ -100,4 +103,7 @@ const appStateSchema = new Schema<AppStateData>(
 	{ timestamps: true, collection: 'app_state' },
 );
 
-export const AppState = mongoose.model<AppStateData>('AppState', appStateSchema);
+export const AppState = mongoose.model<AppStateData>(
+	'AppState',
+	appStateSchema,
+);

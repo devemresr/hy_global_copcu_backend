@@ -11,9 +11,12 @@ const scheduleSchema = z.object({
 	until: boundSchema,
 });
 
-const fromBeforeUntil = <T extends { from?: string | null; until?: string | null }>(
+const fromBeforeUntil = <
+	T extends { from?: string | null; until?: string | null },
+>(
 	value: T,
-) => !value.from || !value.until || new Date(value.from) < new Date(value.until);
+) =>
+	!value.from || !value.until || new Date(value.from) < new Date(value.until);
 const fromBeforeUntilMessage = {
 	message: 'from must be before until',
 	path: ['until'],
@@ -37,11 +40,13 @@ export const updateNoticeSchema = scheduleSchema
 export type UpdateMaintenanceInput = z.infer<typeof updateMaintenanceSchema>;
 export type UpdateNoticeInput = z.infer<typeof updateNoticeSchema>;
 
-export const updatePromotionSchema = z.object({
-	brandLabel: z.string().trim().min(1).max(120).nullable().default(null),
-	enabled: z.boolean(),
-	showEveryVisit: z.boolean(),
-	title: z.string().trim().min(1).max(160).nullable(),
-	tagline: z.string().trim().min(1).max(120).nullable(),
-	description: z.string().trim().min(1).max(1000).nullable(),
-}).strict();
+export const updatePromotionSchema = z
+	.object({
+		brandLabel: z.string().trim().min(1).max(120).nullable().default(null),
+		enabled: z.boolean(),
+		showEveryVisit: z.boolean(),
+		title: z.string().trim().min(1).max(160).nullable(),
+		tagline: z.string().trim().min(1).max(120).nullable(),
+		description: z.string().trim().min(1).max(1000).nullable(),
+	})
+	.strict();

@@ -12,7 +12,10 @@ import { NotFoundError, ValidationError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';
 
-export const listAdmins = async (_req: Request, res: Response): Promise<void> => {
+export const listAdmins = async (
+	_req: Request,
+	res: Response,
+): Promise<void> => {
 	const log = logger.child({ method: 'listAdmins' });
 	try {
 		log.debug('Listing admins');
@@ -28,7 +31,10 @@ export const listAdmins = async (_req: Request, res: Response): Promise<void> =>
 
 // Only a head admin can call this - it's the only way an admin account gets
 // created today (mirrors seed.ts: there's still no self-registration).
-export const createAdmin = async (req: Request, res: Response): Promise<void> => {
+export const createAdmin = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
 	const log = logger.child({ method: 'createAdmin' });
 	try {
 		const { email, username, password, permissions }: CreateAdminInput =

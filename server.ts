@@ -58,10 +58,16 @@ export async function gracefulShutdown(server?: Server): Promise<void> {
 	log.info('Shutdown complete');
 }
 
-async function shutdownAndExit(server: Server, signal: NodeJS.Signals): Promise<void> {
+async function shutdownAndExit(
+	server: Server,
+	signal: NodeJS.Signals,
+): Promise<void> {
 	log.info({ signal }, 'Received shutdown signal');
 	const forceExit = setTimeout(() => {
-		log.fatal({ timeoutMs: SHUTDOWN_TIMEOUT_MS }, 'Shutdown timed out, forcing exit');
+		log.fatal(
+			{ timeoutMs: SHUTDOWN_TIMEOUT_MS },
+			'Shutdown timed out, forcing exit',
+		);
 		process.exit(1);
 	}, SHUTDOWN_TIMEOUT_MS);
 	forceExit.unref();

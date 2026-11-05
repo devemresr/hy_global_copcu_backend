@@ -33,14 +33,23 @@ describe('POST login', () => {
 	});
 
 	it('rejects a wrong password with 401', async () => {
-		const res = await login({ email: TEST_USER.email, password: 'wrongpassword' });
+		const res = await login({
+			email: TEST_USER.email,
+			password: 'wrongpassword',
+		});
 		expect(res.status).toBe(401);
 		expect(getRefreshSetCookie(res)).toBe('');
 	});
 
 	it('answers an unknown email exactly like a wrong password', async () => {
-		const wrongPassword = await login({ email: TEST_USER.email, password: 'nope' });
-		const unknownUser = await login({ email: 'ghost@test.com', password: 'nope' });
+		const wrongPassword = await login({
+			email: TEST_USER.email,
+			password: 'nope',
+		});
+		const unknownUser = await login({
+			email: 'ghost@test.com',
+			password: 'nope',
+		});
 		expect(unknownUser.status).toBe(401);
 		expect(unknownUser.body).toEqual(wrongPassword.body);
 	});

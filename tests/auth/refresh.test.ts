@@ -72,7 +72,11 @@ describe('POST refresh', () => {
 	});
 
 	it('validly signed token without sid (pre-rotation format) - 401', async () => {
-		const legacy = jwt.sign({ userId: 'x', email: 'x', jti: 'x' }, REFRESH_SECRET, { expiresIn: 60 });
+		const legacy = jwt.sign(
+			{ userId: 'x', email: 'x', jti: 'x' },
+			REFRESH_SECRET,
+			{ expiresIn: 60 },
+		);
 		const res = await refresh(`${REFRESH_COOKIE_NAME}=${legacy}`);
 		expect(res.status).toBe(401);
 		expect(res.body.message).toMatch(/Invalid refresh token/i);

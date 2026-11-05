@@ -22,13 +22,19 @@ async function loadAdminAuth(userId: string): Promise<AdminAuth | null> {
 }
 
 export const requirePermission = (permission: Permission) => {
-	return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+	return async (
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void> => {
 		try {
 			const userId = requireUserId(req);
 			const admin = await loadAdminAuth(userId);
 
 			if (!admin) {
-				throw new UnauthorizedError(`No user record found for userId ${userId}`);
+				throw new UnauthorizedError(
+					`No user record found for userId ${userId}`,
+				);
 			}
 
 			if (
@@ -68,7 +74,9 @@ export const requireHeadAdmin = async (
 			return;
 		}
 
-		throw new ForbiddenError(`User ${userId} (role ${admin.role}) is not a head admin`);
+		throw new ForbiddenError(
+			`User ${userId} (role ${admin.role}) is not a head admin`,
+		);
 	} catch (error) {
 		handleHttpError(error, res, log);
 	}

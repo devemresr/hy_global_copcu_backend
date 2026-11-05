@@ -31,16 +31,30 @@ const GROUP_BY_BATCH_OR_SELF = { $ifNull: ['$batchId', '$_id'] };
 
 // Items and site settings share one log_events collection (see LogEvent's
 // comment), so this lists across both rather than needing a route per entity.
-export const listLogEvents = async (req: Request, res: Response): Promise<void> => {
+export const listLogEvents = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
 	const log = logger.child({ method: 'listLogEvents' });
 	try {
 		const { page, pageSize, types, model, caseSensitive } = parseQuery(req);
-		log.debug({ page, pageSize, types, model, caseSensitive }, 'Listing log events');
+		log.debug(
+			{ page, pageSize, types, model, caseSensitive },
+			'Listing log events',
+		);
 		const skip = (page - 1) * pageSize;
-		const filter: PipelineStage[] = types.length > 0 ? [{ $match: { entityType: { $in: types } } }] : [];
+		const filter: PipelineStage[] =
+			types.length > 0 ? [{ $match: { entityType: { $in: types } } }] : [];
 		if (model) {
 			const escaped = model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-			filter.push({ $match: { entityType: LOG_ENTITY_TYPES.ITEM, entityKey: caseSensitive ? model : { $regex: `^${escaped}$`, $options: 'i' } } });
+			filter.push({
+				$match: {
+					entityType: LOG_ENTITY_TYPES.ITEM,
+					entityKey: caseSensitive
+						? model
+						: { $regex: `^${escaped}$`, $options: 'i' },
+				},
+			});
 		}
 
 		const [groupsPage, totalCount] = await Promise.all([

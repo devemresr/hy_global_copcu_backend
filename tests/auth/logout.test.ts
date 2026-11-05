@@ -47,7 +47,9 @@ describe('POST logout', () => {
 			},
 			REFRESH_SECRET,
 		);
-		expect((await logout(`${REFRESH_COOKIE_NAME}=${expired}`)).status).toBe(204);
+		expect((await logout(`${REFRESH_COOKIE_NAME}=${expired}`)).status).toBe(
+			204,
+		);
 		expect(await Session.countDocuments()).toBe(0);
 	});
 

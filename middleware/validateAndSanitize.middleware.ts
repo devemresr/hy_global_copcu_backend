@@ -1,6 +1,6 @@
 function sanitizeAndDetect(
 	obj: any,
-	depth: number = 0
+	depth: number = 0,
 ): { sanitized: any; hadProhibited: boolean } {
 	if (depth > 10) return { sanitized: {}, hadProhibited: false };
 

@@ -8,7 +8,11 @@ const MAX_PAGE_SIZE = 100;
 // ("2") into actual numbers before the min/int/max checks run.
 export const logEventsQuerySchema = z.object({
 	model: z.string().trim().max(500).optional().default(''),
-	caseSensitive: z.enum(['true', 'false']).optional().default('false').transform((value) => value === 'true'),
+	caseSensitive: z
+		.enum(['true', 'false'])
+		.optional()
+		.default('false')
+		.transform((value) => value === 'true'),
 	page: z.coerce.number().int().min(1).optional().default(1),
 	pageSize: z.coerce
 		.number()
@@ -22,7 +26,9 @@ export const logEventsQuerySchema = z.object({
 		.string()
 		.optional()
 		.transform((value) => (value ? value.split(',') : []))
-		.pipe(z.array(z.enum(Object.values(LOG_ENTITY_TYPES) as [string, ...string[]]))),
+		.pipe(
+			z.array(z.enum(Object.values(LOG_ENTITY_TYPES) as [string, ...string[]])),
+		),
 });
 
 export type LogEventsQuery = z.infer<typeof logEventsQuerySchema>;

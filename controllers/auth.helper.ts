@@ -3,7 +3,10 @@ import { generateAccessToken } from '../services/auth/generateTokens.service';
 import { createSession } from '../services/auth/session.service';
 import type { NextFunction, Request, Response } from 'express';
 import { verifyJwt } from '../services/auth/verifyJWT.service';
-import { AccessTokenExpiredError, AuthResponseError } from '../services/auth/auth.errors';
+import {
+	AccessTokenExpiredError,
+	AuthResponseError,
+} from '../services/auth/auth.errors';
 import { UnauthorizedError } from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';

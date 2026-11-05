@@ -16,12 +16,7 @@ import { ADMIN_ROUTES } from './routes.constant';
 const router = () => {
 	const router = Router();
 
-	router.get(
-		ADMIN_ROUTES.LIST,
-		...requireAuth(),
-		requireHeadAdmin,
-		listAdmins,
-	);
+	router.get(ADMIN_ROUTES.LIST, ...requireAuth(), requireHeadAdmin, listAdmins);
 	router.post(
 		ADMIN_ROUTES.CREATE,
 		...requireAuth(),

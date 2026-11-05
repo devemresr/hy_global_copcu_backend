@@ -72,9 +72,19 @@ export function createCachedFetcher<T>(
 	};
 
 	const getWithMetadata = async () => {
-		const source = entry && entry.expiresAt > Date.now() ? 'memory-cache' : inFlight ? 'shared-database-fetch' : 'database';
+		const source =
+			entry && entry.expiresAt > Date.now()
+				? 'memory-cache'
+				: inFlight
+					? 'shared-database-fetch'
+					: 'database';
 		const value = await get();
-		return { value, source, cachedAt: entry?.cachedAt ?? null, expiresAt: entry?.expiresAt ?? null };
+		return {
+			value,
+			source,
+			cachedAt: entry?.cachedAt ?? null,
+			expiresAt: entry?.expiresAt ?? null,
+		};
 	};
 
 	return { get, getWithMetadata, invalidate };

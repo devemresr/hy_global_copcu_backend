@@ -1,5 +1,9 @@
 import { LogEvent } from '../../models/LogEvent';
-import type { LogAction, LogEntityType, FieldChange } from '../../models/LogEvent';
+import type {
+	LogAction,
+	LogEntityType,
+	FieldChange,
+} from '../../models/LogEvent';
 import logger from '../../util/logger';
 
 const log = logger.child({ service: 'recordLogEvent' });
@@ -20,7 +24,9 @@ type RecordLogEventInput = {
 
 // Best-effort: the item write already committed by the time this runs, so a
 // logging failure shouldn't turn a successful CRUD response into a 500.
-export async function recordLogEvent(input: RecordLogEventInput): Promise<void> {
+export async function recordLogEvent(
+	input: RecordLogEventInput,
+): Promise<void> {
 	try {
 		await LogEvent.create(input);
 	} catch (error) {

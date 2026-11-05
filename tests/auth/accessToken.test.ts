@@ -31,7 +31,11 @@ describe('requireAuth - access token on a protected route', () => {
 
 	it('token signed with the wrong secret - 401 invalid', async () => {
 		const forged = jwt.sign(
-			{ userId: new mongoose.Types.ObjectId().toString(), email: 'x', jti: 'x' },
+			{
+				userId: new mongoose.Types.ObjectId().toString(),
+				email: 'x',
+				jti: 'x',
+			},
 			'wrong-secret',
 		);
 		const res = await getProtected(forged);
@@ -40,7 +44,9 @@ describe('requireAuth - access token on a protected route', () => {
 	});
 
 	it('unsigned (alg: none) token - 401 invalid', async () => {
-		const unsigned = jwt.sign({ userId: 'x', email: 'x', jti: 'x' }, '', { algorithm: 'none' });
+		const unsigned = jwt.sign({ userId: 'x', email: 'x', jti: 'x' }, '', {
+			algorithm: 'none',
+		});
 		const res = await getProtected(unsigned);
 		expect(res.status).toBe(401);
 		expect(res.body.message).toMatch(/Invalid access token/i);

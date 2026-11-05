@@ -17,7 +17,12 @@ export type SessionData = {
 const sessionSchema = new Schema<SessionData>(
 	{
 		_id: { type: String, required: true },
-		userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+		userId: {
+			type: Schema.Types.ObjectId,
+			ref: 'User',
+			required: true,
+			index: true,
+		},
 		currentJti: { type: String, required: true },
 		previousJti: { type: String, default: null },
 		rotatedAt: { type: Date, default: null },

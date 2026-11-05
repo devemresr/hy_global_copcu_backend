@@ -26,8 +26,16 @@ const router = () => {
 	const router = Router();
 
 	router.get(ITEMS_ROUTES.LIST, blockPublicDuringMaintenance, listItems);
-	router.get(ITEMS_ROUTES.CHANGES, blockPublicDuringMaintenance, listItemChanges);
-	router.get(`${ITEMS_ROUTES.LIST}/price-rules`, blockPublicDuringMaintenance, listCustomerPriceRules);
+	router.get(
+		ITEMS_ROUTES.CHANGES,
+		blockPublicDuringMaintenance,
+		listItemChanges,
+	);
+	router.get(
+		`${ITEMS_ROUTES.LIST}/price-rules`,
+		blockPublicDuringMaintenance,
+		listCustomerPriceRules,
+	);
 	router.post(
 		ITEMS_ROUTES.CREATE,
 		...requireAuth(),

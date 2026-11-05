@@ -15,12 +15,13 @@ import {
 } from '../schemas/item.schema';
 import { recordLogEvent } from '../services/logEvents/recordLogEvent.service';
 import { createCachedFetcher } from '../util/queryCache';
-import {
-	getVersion,
-	withVersionBump,
-} from '../services/sync/version.service';
+import { getVersion, withVersionBump } from '../services/sync/version.service';
 import { requireUserId } from './auth.helper';
-import { UnauthorizedError, NotFoundError, ConflictError } from '../errors/HttpError';
+import {
+	UnauthorizedError,
+	NotFoundError,
+	ConflictError,
+} from '../errors/HttpError';
 import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';
 
@@ -31,8 +32,16 @@ const ITEMS_TTL_MS = 5 * 60 * 1000;
 
 const itemsCache = createCachedFetcher(
 	async () => {
-		const items = await Item.find({ deletedAt: null }).select('-deletedAt -__v').sort({ _id: 1 }).lean();
-		return { items, fingerprint: createHash('sha256').update(JSON.stringify(items)).digest('hex') };
+		const items = await Item.find({ deletedAt: null })
+			.select('-deletedAt -__v')
+			.sort({ _id: 1 })
+			.lean();
+		return {
+			items,
+			fingerprint: createHash('sha256')
+				.update(JSON.stringify(items))
+				.digest('hex'),
+		};
 	},
 	{ ttlMs: ITEMS_TTL_MS },
 );
@@ -55,15 +64,22 @@ function requireLogActor(req: Request): {
 
 // The version is read before the items, so the list is never older than the
 // version it's labelled with (an in-flight write can only make it newer).
-export const listItems = async (
-	req: Request,
-	res: Response,
-): Promise<void> => {
+export const listItems = async (req: Request, res: Response): Promise<void> => {
 	const log = logger.child({ method: 'listItems' });
 	try {
 		const version = getVersion();
-		const { value: { items, fingerprint }, source, cachedAt, expiresAt } = await itemsCache.getWithMetadata();
-		const cacheDetails = { source, cachedAt: cachedAt ? new Date(cachedAt).toISOString() : null, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null, cacheAgeMs: cachedAt ? Date.now() - cachedAt : null };
+		const {
+			value: { items, fingerprint },
+			source,
+			cachedAt,
+			expiresAt,
+		} = await itemsCache.getWithMetadata();
+		const cacheDetails = {
+			source,
+			cachedAt: cachedAt ? new Date(cachedAt).toISOString() : null,
+			expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+			cacheAgeMs: cachedAt ? Date.now() - cachedAt : null,
+		};
 		// Browsers may store this HTTP response, but must check with the server
 		// before reusing it. This does not disable the server's itemsCache.
 		res.set('Cache-Control', 'no-cache');
@@ -72,7 +88,15 @@ export const listItems = async (
 		res.set('ETag', `"items-${version}-${fingerprint}"`);
 		if (items.length === 0) {
 			itemsCache.invalidate();
-			log.warn({ version, ...cacheDetails, database: Item.db.name, collection: Item.collection.name }, 'Items query returned no active items; empty result will not be retained in cache');
+			log.warn(
+				{
+					version,
+					...cacheDetails,
+					database: Item.db.name,
+					collection: Item.collection.name,
+				},
+				'Items query returned no active items; empty result will not be retained in cache',
+			);
 		}
 		// Express defines req.fresh as a getter; reading it runs a check rather
 		// than reading a flag assigned by our code. For this GET, it compares
@@ -81,12 +105,29 @@ export const listItems = async (
 		// A match lets us return 304 without a body so the browser can reuse its
 		// saved response body. This check is separate from itemsCache's TTL.
 		if (req.fresh) {
-			log.info({ version, count: items.length, ...cacheDetails, responseSource: 'browser-http-cache' }, 'Items HTTP cache revalidated (304)');
+			log.info(
+				{
+					version,
+					count: items.length,
+					...cacheDetails,
+					responseSource: 'browser-http-cache',
+				},
+				'Items HTTP cache revalidated (304)',
+			);
 			res.status(304).end();
 			return;
 		}
 
-		log.info({ version, count: items.length, ...cacheDetails, database: Item.db.name, collection: Item.collection.name }, 'Items served (200)');
+		log.info(
+			{
+				version,
+				count: items.length,
+				...cacheDetails,
+				database: Item.db.name,
+				collection: Item.collection.name,
+			},
+			'Items served (200)',
+		);
 		res.status(200).json({ success: true, version, items });
 	} catch (error) {
 		handleHttpError(error, res, log);
@@ -109,10 +150,21 @@ export const listItemChanges = async (
 		res.set('Cache-Control', 'no-store');
 
 		if (!Number.isInteger(since) || since < 0 || since > version) {
-			log.debug({ since, version }, 'since missing/invalid/ahead, returning full list');
-			const { value: { items }, source, cachedAt, expiresAt } = await itemsCache.getWithMetadata();
+			log.debug(
+				{ since, version },
+				'since missing/invalid/ahead, returning full list',
+			);
+			const {
+				value: { items },
+				source,
+				cachedAt,
+				expiresAt,
+			} = await itemsCache.getWithMetadata();
 			if (items.length === 0) itemsCache.invalidate();
-			log.info({ since, version, count: items.length, source, cachedAt, expiresAt }, 'Full items list served for delta reset');
+			log.info(
+				{ since, version, count: items.length, source, cachedAt, expiresAt },
+				'Full items list served for delta reset',
+			);
 			res.status(200).json({ success: true, full: true, version, items });
 			return;
 		}
@@ -131,7 +183,9 @@ export const listItemChanges = async (
 			{ since, version, updated: updated.length, deleted: deleted.length },
 			'Item changes listed',
 		);
-		res.status(200).json({ success: true, full: false, version, updated, deleted });
+		res
+			.status(200)
+			.json({ success: true, full: false, version, updated, deleted });
 	} catch (error) {
 		handleHttpError(error, res, log);
 	}
@@ -169,7 +223,11 @@ export const createItem = async (
 		});
 
 		log.info(
-			{ adminId: actor.adminId, itemId: item._id.toString(), model: item.model },
+			{
+				adminId: actor.adminId,
+				itemId: item._id.toString(),
+				model: item.model,
+			},
 			'Item created',
 		);
 		res.status(201).json({ success: true, item: item.toObject() });
@@ -236,7 +294,10 @@ export const updateItem = async (
 				version: item.version,
 			});
 			log.info(
-				{ adminId: actor.adminId, changedFields: changedFields.map((f) => f.field) },
+				{
+					adminId: actor.adminId,
+					changedFields: changedFields.map((f) => f.field),
+				},
 				'Item updated',
 			);
 		} else {
@@ -257,27 +318,48 @@ export const bulkUpdateItems = async (
 	const log = logger.child({ method: 'bulkUpdateItems' });
 	try {
 		const actor = requireLogActor(req);
-		const { ids, fields, ruleOverrideRevision }: BulkUpdateItemsInput = req.body;
+		const { ids, fields, ruleOverrideRevision }: BulkUpdateItemsInput =
+			req.body;
 		log.debug({ adminId: actor.adminId, ids, fields }, 'Bulk updating items');
 
-		const { result, version, updates } = await withVersionBump(async (version) => {
-			const previousItems = await Item.find({ _id: { $in: ids }, deletedAt: null }).lean();
-			const ruleSet = await ItemRuleSet.findById(ITEM_RULE_SET_ID).lean();
-			const hasConflicts = previousItems.some((previous) => {
-				const resolved = resolveBulkItemRules(previous, fields, ruleSet?.rules ?? []);
-				return (Object.keys(fields) as (keyof UpdateItemInput)[]).some((field) => resolved[field] !== fields[field]);
-			});
-			if (hasConflicts && ruleOverrideRevision !== (ruleSet?.revision ?? 0)) {
-				throw new ConflictError('Bu değişiklik ürün kurallarıyla çelişiyor. Kuralları yenileyip kural uyarısını onaylayın.');
-			}
-			// Approval saves the requested fields exactly; rules remain unchanged.
-			const updates = previousItems.map((previous) => ({ previous, fields }));
-			const result = updates.length ? await Item.bulkWrite(updates.map(({ previous, fields: resolved }) => ({
-				updateOne: { filter: { _id: previous._id, deletedAt: null }, update: { $set: { ...resolved, version } } },
-			}))) : { matchedCount: 0, modifiedCount: 0 };
-			itemsCache.invalidate();
-			return { result, version, updates };
-		});
+		const { result, version, updates } = await withVersionBump(
+			async (version) => {
+				const previousItems = await Item.find({
+					_id: { $in: ids },
+					deletedAt: null,
+				}).lean();
+				const ruleSet = await ItemRuleSet.findById(ITEM_RULE_SET_ID).lean();
+				const hasConflicts = previousItems.some((previous) => {
+					const resolved = resolveBulkItemRules(
+						previous,
+						fields,
+						ruleSet?.rules ?? [],
+					);
+					return (Object.keys(fields) as (keyof UpdateItemInput)[]).some(
+						(field) => resolved[field] !== fields[field],
+					);
+				});
+				if (hasConflicts && ruleOverrideRevision !== (ruleSet?.revision ?? 0)) {
+					throw new ConflictError(
+						'Bu değişiklik ürün kurallarıyla çelişiyor. Kuralları yenileyip kural uyarısını onaylayın.',
+					);
+				}
+				// Approval saves the requested fields exactly; rules remain unchanged.
+				const updates = previousItems.map((previous) => ({ previous, fields }));
+				const result = updates.length
+					? await Item.bulkWrite(
+							updates.map(({ previous, fields: resolved }) => ({
+								updateOne: {
+									filter: { _id: previous._id, deletedAt: null },
+									update: { $set: { ...resolved, version } },
+								},
+							})),
+						)
+					: { matchedCount: 0, modifiedCount: 0 };
+				itemsCache.invalidate();
+				return { result, version, updates };
+			},
+		);
 
 		// One id shared by every row this request touches, so listLogEvents can
 		// fold them back into the single bulk event they came from instead of
@@ -286,7 +368,9 @@ export const bulkUpdateItems = async (
 		const batchId = nanoid();
 		await Promise.all(
 			updates.map(({ previous, fields }) => {
-				const changedFieldKeys = Object.keys(fields) as (keyof UpdateItemInput)[];
+				const changedFieldKeys = Object.keys(
+					fields,
+				) as (keyof UpdateItemInput)[];
 				const changedFields: FieldChange[] = changedFieldKeys
 					.filter((field) => fields[field] !== (previous[field] ?? null))
 					.map((field) => ({
@@ -337,7 +421,10 @@ export const bulkUpdateItems = async (
 };
 
 /** Same soft-delete, version and audit behavior as deleteItem, one batch. */
-export const bulkDeleteItems = async (req: Request, res: Response): Promise<void> => {
+export const bulkDeleteItems = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
 	const log = logger.child({ method: 'bulkDeleteItems' });
 	try {
 		const actor = requireLogActor(req);
@@ -345,8 +432,12 @@ export const bulkDeleteItems = async (req: Request, res: Response): Promise<void
 		const { deletedItems, version } = await withVersionBump(async (version) => {
 			// Read inside the write queue so concurrent server mutations cannot
 			// change the snapshot between selection and deletion.
-			const previousItems = await Item.find({ _id: { $in: ids }, deletedAt: null }).lean();
-			if (!previousItems.length) return { deletedItems: previousItems, version };
+			const previousItems = await Item.find({
+				_id: { $in: ids },
+				deletedAt: null,
+			}).lean();
+			if (!previousItems.length)
+				return { deletedItems: previousItems, version };
 			const selectedIds = previousItems.map((item) => item._id);
 			const deletedAt = new Date();
 			await Item.updateMany(
@@ -356,23 +447,58 @@ export const bulkDeleteItems = async (req: Request, res: Response): Promise<void
 			itemsCache.invalidate();
 			// Only log rows actually changed by this request, including when an
 			// external process has already deleted one of the selected rows.
-			const changed = await Item.find({ _id: { $in: selectedIds }, deletedAt, version }).select('_id').lean();
+			const changed = await Item.find({
+				_id: { $in: selectedIds },
+				deletedAt,
+				version,
+			})
+				.select('_id')
+				.lean();
 			const changedIds = new Set(changed.map((item) => item._id.toString()));
-			return { deletedItems: previousItems.filter((item) => changedIds.has(item._id.toString())), version };
+			return {
+				deletedItems: previousItems.filter((item) =>
+					changedIds.has(item._id.toString()),
+				),
+				version,
+			};
 		});
 		const batchId = nanoid();
-		await Promise.all(deletedItems.map((item) => recordLogEvent({
-			...actor,
-			action: LOG_ACTIONS.ITEMS_DELETE,
-			entityType: LOG_ENTITY_TYPES.ITEM,
-			entityId: item._id.toString(),
-			entityKey: item.model,
-			fields: EDITABLE_ITEM_FIELDS.map((field) => ({ field, previousValue: item[field] ?? null, newValue: null })),
-			batchId,
-			version,
-		})));
-		log.info({ adminId: actor.adminId, requestedCount: ids.length, deletedCount: deletedItems.length, batchId }, 'Items bulk deleted');
-		res.status(200).json({ success: true, matchedCount: deletedItems.length, deletedCount: deletedItems.length, deletedIds: deletedItems.map((item) => String(item._id)), version });
+		await Promise.all(
+			deletedItems.map((item) =>
+				recordLogEvent({
+					...actor,
+					action: LOG_ACTIONS.ITEMS_DELETE,
+					entityType: LOG_ENTITY_TYPES.ITEM,
+					entityId: item._id.toString(),
+					entityKey: item.model,
+					fields: EDITABLE_ITEM_FIELDS.map((field) => ({
+						field,
+						previousValue: item[field] ?? null,
+						newValue: null,
+					})),
+					batchId,
+					version,
+				}),
+			),
+		);
+		log.info(
+			{
+				adminId: actor.adminId,
+				requestedCount: ids.length,
+				deletedCount: deletedItems.length,
+				batchId,
+			},
+			'Items bulk deleted',
+		);
+		res
+			.status(200)
+			.json({
+				success: true,
+				matchedCount: deletedItems.length,
+				deletedCount: deletedItems.length,
+				deletedIds: deletedItems.map((item) => String(item._id)),
+				version,
+			});
 	} catch (error) {
 		handleHttpError(error, res, log);
 	}

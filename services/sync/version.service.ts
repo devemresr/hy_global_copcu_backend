@@ -48,7 +48,14 @@ const DEFAULT_NOTICE: NoticeState = {
 };
 
 let committedVersion = 0;
-const DEFAULT_PROMOTION: PromotionState = { enabled: true, showEveryVisit: false, brandLabel: null, title: null, tagline: null, description: null };
+const DEFAULT_PROMOTION: PromotionState = {
+	enabled: true,
+	showEveryVisit: false,
+	brandLabel: null,
+	title: null,
+	tagline: null,
+	description: null,
+};
 let promotion = DEFAULT_PROMOTION;
 let maintenance = DEFAULT_MAINTENANCE;
 let notice = DEFAULT_NOTICE;
@@ -85,11 +92,17 @@ export function getVersion(): number {
 	return committedVersion;
 }
 
-export function getPromotion(): PromotionState { return promotion; }
+export function getPromotion(): PromotionState {
+	return promotion;
+}
 
 export function setPromotion(next: PromotionState): Promise<PromotionState> {
 	return withVersionBump(async () => {
-		await AppState.updateOne({ _id: APP_STATE_ID }, { $set: { promotion: next } }, { upsert: true });
+		await AppState.updateOne(
+			{ _id: APP_STATE_ID },
+			{ $set: { promotion: next } },
+			{ upsert: true },
+		);
 		promotion = next;
 		return next;
 	});
@@ -103,7 +116,10 @@ export function getNotice(): NoticeState {
 	return notice;
 }
 
-export function isScheduleActive(schedule: Schedule, now = new Date()): boolean {
+export function isScheduleActive(
+	schedule: Schedule,
+	now = new Date(),
+): boolean {
 	return (
 		schedule.enabled &&
 		(!schedule.from || schedule.from <= now) &&
@@ -142,7 +158,9 @@ export function withVersionBump<T>(
 
 // Both setters bump the version, which changes the status ETag, so pollers
 // pick the new state up on their next check.
-export function setMaintenance(next: MaintenanceState): Promise<MaintenanceState> {
+export function setMaintenance(
+	next: MaintenanceState,
+): Promise<MaintenanceState> {
 	return withVersionBump(async () => {
 		await AppState.updateOne(
 			{ _id: APP_STATE_ID },

@@ -19,10 +19,17 @@ export type StorageUnit = z.infer<typeof storageUnitSchema>;
 export const editableItemFieldsSchema = z.object({
 	model: z.string().trim().min(1, 'Model is required'),
 	bellekTipi: z.string().trim().min(1).nullable().optional(),
-	depolama: z.number().positive('depolama must be a positive number').refine(isPowerOfTwo, STORAGE_POWER_WARNING).nullable(),
+	depolama: z
+		.number()
+		.positive('depolama must be a positive number')
+		.refine(isPowerOfTwo, STORAGE_POWER_WARNING)
+		.nullable(),
 	depolamaBirimi: storageUnitSchema,
 	ram: z.string().trim().min(1).nullable().optional(),
-	fiyat: z.number().nonnegative('fiyat must be a non-negative number').nullable(),
+	fiyat: z
+		.number()
+		.nonnegative('fiyat must be a non-negative number')
+		.nullable(),
 	paraBirimi: currencySchema,
 });
 
@@ -51,22 +58,24 @@ export const bulkUpdateItemsSchema = z.object({
 		.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid item id'))
 		.min(1, 'At least one item id is required')
 		.max(1000, 'Too many items in one bulk update'),
-	fields: updateItemSchema.refine(
-		(fields) => Object.keys(fields).length > 0,
-		{ message: 'At least one field to update is required' },
-	),
+	fields: updateItemSchema.refine((fields) => Object.keys(fields).length > 0, {
+		message: 'At least one field to update is required',
+	}),
 });
 
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
 export type BulkUpdateItemsInput = z.infer<typeof bulkUpdateItemsSchema>;
 
-export const bulkDeleteItemsSchema = z.object({
-	ids: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid item id'))
-		.min(1, 'At least one item id is required')
-		.max(1000, 'Too many items in one bulk delete')
-		.transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]),
-}).strict();
+export const bulkDeleteItemsSchema = z
+	.object({
+		ids: z
+			.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid item id'))
+			.min(1, 'At least one item id is required')
+			.max(1000, 'Too many items in one bulk delete')
+			.transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]),
+	})
+	.strict();
 export type BulkDeleteItemsInput = z.infer<typeof bulkDeleteItemsSchema>;
 
 export const EDITABLE_ITEM_FIELDS = Object.keys(

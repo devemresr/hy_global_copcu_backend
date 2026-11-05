@@ -55,7 +55,9 @@ export class InvalidCredentialsError extends AuthError {
 }
 
 export class InvalidSessionError extends AuthError {
-	constructor(message = 'userId from refresh token has no matching user record') {
+	constructor(
+		message = 'userId from refresh token has no matching user record',
+	) {
 		super(message, 401, 'Invalid session');
 	}
 }

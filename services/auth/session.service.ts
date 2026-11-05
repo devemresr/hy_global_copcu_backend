@@ -54,7 +54,9 @@ const verifyRefreshToken = (
 	}) as RefreshTokenPayload;
 
 	if (!decoded.sid || !decoded.jti) {
-		throw new InvalidRefreshToken('Refresh token payload missing sid/jti claim');
+		throw new InvalidRefreshToken(
+			'Refresh token payload missing sid/jti claim',
+		);
 	}
 	return decoded;
 };
@@ -145,7 +147,10 @@ export const revokeSession = async (refreshToken: string | undefined) => {
 		// An expired token still names a session worth deleting.
 		({ sid } = verifyRefreshToken(refreshToken, { ignoreExpiration: true }));
 	} catch (error) {
-		if (error instanceof JsonWebTokenError || error instanceof InvalidRefreshToken) {
+		if (
+			error instanceof JsonWebTokenError ||
+			error instanceof InvalidRefreshToken
+		) {
 			return;
 		}
 		throw error;

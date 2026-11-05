@@ -25,7 +25,9 @@ const refresh = async (req: Request, res: Response): Promise<void> => {
 			.select('-password -__v -createdAt -updatedAt')
 			.lean<PublicUser>();
 		if (!user) {
-			throw new InvalidSessionError(`No user record found for userId ${userId}`);
+			throw new InvalidSessionError(
+				`No user record found for userId ${userId}`,
+			);
 		}
 
 		res.status(200).json({

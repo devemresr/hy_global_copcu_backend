@@ -41,7 +41,12 @@ export const getRefreshSetCookie = (res: request.Response) =>
 export const toCookieHeader = (setCookie: string) => setCookie.split(';')[0]!;
 
 export const cookieClaims = (cookie: string) =>
-	jwt.decode(cookie.split('=')[1]!) as { sid: string; jti: string; userId: string; email: string };
+	jwt.decode(cookie.split('=')[1]!) as {
+		sid: string;
+		jti: string;
+		userId: string;
+		email: string;
+	};
 
 export const login = (body: object = TEST_USER) =>
 	request(app).post(AUTH_ROUTES.LOGIN).send(body);
