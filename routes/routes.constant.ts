@@ -5,6 +5,8 @@ export const API_BASE_PATHS = {
 	ADMINS: '/admins',
 	LOG_EVENTS: '/log-events',
 	SITE: '/site',
+	ORDERS: '/orders',
+	BAYILER: '/bayiler',
 } as const;
 
 // The refresh cookie's path - only routes under it ever receive the cookie.
@@ -37,7 +39,10 @@ export const ADMIN_ROUTES = {
 	UPDATE_PERMISSIONS: `${API_BASE_PATHS.ADMINS}/:id/permissions`,
 } as const;
 
-export const ITEM_RULE_ROUTES = { LIST: API_BASE_PATHS.ITEM_RULES, SAVE: API_BASE_PATHS.ITEM_RULES } as const;
+export const ITEM_RULE_ROUTES = {
+	LIST: API_BASE_PATHS.ITEM_RULES,
+	SAVE: API_BASE_PATHS.ITEM_RULES,
+} as const;
 
 export const SITE_ROUTES = {
 	PROMOTION: `${API_BASE_PATHS.SITE}/promotion`,
@@ -48,4 +53,23 @@ export const SITE_ROUTES = {
 
 export const LOG_EVENTS_ROUTES = {
 	LIST: `${API_BASE_PATHS.LOG_EVENTS}`,
+} as const;
+
+export const ORDER_ROUTES = {
+	REPORT: `${API_BASE_PATHS.ORDERS}/report`,
+	LIST: API_BASE_PATHS.ORDERS,
+	CREATE: API_BASE_PATHS.ORDERS,
+	PRICING: `${API_BASE_PATHS.ORDERS}/pricing`,
+} as const;
+
+export const BAYI_ROUTES = {
+	LIST: API_BASE_PATHS.BAYILER,
+	CREATE: API_BASE_PATHS.BAYILER,
+	UPDATE: `${API_BASE_PATHS.BAYILER}/:id`,
+} as const;
+
+export const STOCK_ROUTES = {
+	LIST: '/stock',
+	SALES: '/stock/sales',
+	WARNINGS: '/stock/purchase-warnings',
 } as const;

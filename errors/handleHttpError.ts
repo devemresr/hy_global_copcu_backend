@@ -3,7 +3,10 @@ import type { Logger } from 'pino';
 import jwt from 'jsonwebtoken';
 const { JsonWebTokenError, TokenExpiredError } = jwt;
 import { HttpError } from './HttpError';
-import { ExpiredRefreshTokenError, InvalidRefreshToken } from '../services/auth/auth.errors';
+import {
+	ExpiredRefreshTokenError,
+	InvalidRefreshToken,
+} from '../services/auth/auth.errors';
 import env from '../config/env';
 
 /**
@@ -13,10 +16,20 @@ import env from '../config/env';
  * Callers throw a typed error and pass it here in one catch block; nothing
  * should call res.status(...).json(...) directly outside of this file.
  */
-export const handleHttpError = (error: unknown, res: Response, log: Logger): void => {
+export const handleHttpError = (
+	error: unknown,
+	res: Response,
+	log: Logger,
+): void => {
 	if (error instanceof HttpError) {
 		log.warn({ err: error }, error.message);
-		res.status(error.statusCode).json({ success: false, message: error.clientMessage });
+		res
+			.status(error.statusCode)
+			.json({
+				success: false,
+				message: error.clientMessage,
+				...(error.details === undefined ? {} : { details: error.details }),
+			});
 		return;
 	}
 

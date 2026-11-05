@@ -11,6 +11,10 @@ export const LOG_ACTIONS = {
 	SITE_MAINTENANCE_UPDATE: 'site:maintenance_update',
 	SITE_NOTICE_UPDATE: 'site:notice_update',
 	SITE_PROMOTION_UPDATE: 'site:promotion_update',
+	STOCK_RESTOCK_COMPLETE: 'stock:restock_complete',
+	STOCK_RESTOCK_PARTIAL: 'stock:restock_partial',
+	STOCK_PRICE_UPDATE: 'stock:price_update',
+	STOCK_PURCHASE_CREATE: 'stock:purchase_create',
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
@@ -23,6 +27,9 @@ export const LOG_ENTITY_TYPES = {
 	SITE_MAINTENANCE: 'site_maintenance',
 	SITE_NOTICE: 'site_notice',
 	SITE_PROMOTION: 'site_promotion',
+	STOCK_RESTOCK: 'stock_restock',
+	STOCK_PRICE: 'stock_price',
+	STOCK_PURCHASE: 'stock_purchase',
 } as const;
 
 export type LogEntityType =

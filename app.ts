@@ -11,6 +11,9 @@ import itemRuleRoutes from './routes/itemRuleRoutes';
 import adminRoutes from './routes/adminRoutes';
 import logEventRoutes from './routes/logEventRoutes';
 import siteRoutes from './routes/siteRoutes';
+import orderRoutes from './routes/orderRoutes';
+import bayiRoutes from './routes/bayiRoutes';
+import stockRoutes from './routes/stockRoutes';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 
 const app = express();
@@ -31,5 +34,8 @@ app.use(itemRuleRoutes());
 app.use(adminRoutes());
 app.use(logEventRoutes());
 app.use(siteRoutes());
+app.use(orderRoutes());
+app.use(bayiRoutes());
+app.use(stockRoutes());
 
 export default app;

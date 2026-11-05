@@ -7,18 +7,28 @@
 export class HttpError extends Error {
 	statusCode: number;
 	clientMessage: string;
+	details?: unknown;
 
-	constructor(message: string, statusCode: number, clientMessage: string) {
+	constructor(
+		message: string,
+		statusCode: number,
+		clientMessage: string,
+		details?: unknown,
+	) {
 		super(message);
 		this.statusCode = statusCode;
 		this.clientMessage = clientMessage;
+		this.details = details;
 		this.name = new.target.name;
 		Object.setPrototypeOf(this, new.target.prototype);
 	}
 }
 
 export class UnauthorizedError extends HttpError {
-	constructor(message = 'Not authenticated', clientMessage = 'Invalid session') {
+	constructor(
+		message = 'Not authenticated',
+		clientMessage = 'Invalid session',
+	) {
 		super(message, 401, clientMessage);
 	}
 }
@@ -42,7 +52,7 @@ export class ValidationError extends HttpError {
 }
 
 export class ConflictError extends HttpError {
-	constructor(message: string) {
-		super(message, 409, message);
+	constructor(message: string, details?: unknown) {
+		super(message, 409, message, details);
 	}
 }

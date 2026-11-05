@@ -7,7 +7,10 @@ import mongoose from 'mongoose';
 // lifetimes so a token cannot expire between requests in a multi-step test.
 // JWT expiry has 1-second resolution; helpers.ts's TIMING accounts for that.
 vi.mock('../services/auth/constants/jwtConstants', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('../services/auth/constants/jwtConstants')>();
+	const actual =
+		await importOriginal<
+			typeof import('../services/auth/constants/jwtConstants')
+		>();
 	const testPath = expect.getState().testPath?.replace(/\\/g, '/');
 	if (!testPath?.includes('/tests/auth/')) return actual;
 	return {
@@ -19,12 +22,18 @@ vi.mock('../services/auth/constants/jwtConstants', async (importOriginal) => {
 
 // The real login limiter (10 per 15 min) would start answering 429 mid-suite.
 vi.mock('../middleware/rateLimit.middleware', () => {
-	const passThrough = (_req: unknown, _res: unknown, next: () => void) => next();
+	const passThrough = (_req: unknown, _res: unknown, next: () => void) =>
+		next();
 	return { apiLimiter: passThrough, loginLimiter: passThrough };
 });
 
 beforeAll(async () => {
 	await mongoose.connect(inject('mongoUri'));
+	// Finish automatic index builds before beforeEach drops the database.
+	// Otherwise Model.init() can cache an index-build rejection for the suite.
+	await Promise.all(
+		Object.values(mongoose.models).map((model) => model.init()),
+	);
 });
 
 beforeEach(async () => {
