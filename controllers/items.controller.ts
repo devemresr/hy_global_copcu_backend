@@ -64,6 +64,8 @@ export const listItems = async (
 		const version = getVersion();
 		const { value: { items, fingerprint }, source, cachedAt, expiresAt } = await itemsCache.getWithMetadata();
 		const cacheDetails = { source, cachedAt: cachedAt ? new Date(cachedAt).toISOString() : null, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null, cacheAgeMs: cachedAt ? Date.now() - cachedAt : null };
+		// Browsers may store this HTTP response, but must check with the server
+		// before reusing it. This does not disable the server's itemsCache.
 		res.set('Cache-Control', 'no-cache');
 		// A seed can reset version to zero. Data identity must also participate
 		// so an old empty response cannot validate against a populated database.
@@ -72,6 +74,12 @@ export const listItems = async (
 			itemsCache.invalidate();
 			log.warn({ version, ...cacheDetails, database: Item.db.name, collection: Item.collection.name }, 'Items query returned no active items; empty result will not be retained in cache');
 		}
+		// Express defines req.fresh as a getter; reading it runs a check rather
+		// than reading a flag assigned by our code. For this GET, it compares
+		// the request's If-None-Match (the browser's saved ETag) with the response
+		// ETag set above, subject to HTTP method/status/cache-control checks.
+		// A match lets us return 304 without a body so the browser can reuse its
+		// saved response body. This check is separate from itemsCache's TTL.
 		if (req.fresh) {
 			log.info({ version, count: items.length, ...cacheDetails, responseSource: 'browser-http-cache' }, 'Items HTTP cache revalidated (304)');
 			res.status(304).end();
