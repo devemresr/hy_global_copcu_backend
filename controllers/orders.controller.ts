@@ -59,7 +59,12 @@ export const createOrder = async (
 					? prices[line.type]?.[memoryGb]
 					: undefined;
 			const originalUnitPrice = catalogPrice ?? line.manualListPrice ?? null;
-			const unitPrice = line.unitPriceOverride ?? originalUnitPrice;
+			const unitPrice =
+				line.totalPriceOverride === undefined
+					? (line.unitPriceOverride ?? originalUnitPrice)
+					: line.totalPriceOverride / line.quantity;
+			if (unitPrice !== null && unitPrice > 1_000_000)
+				throw new ValidationError('Birim fiyat 1.000.000 TL değerini aşamaz.');
 			if (unitPrice === null)
 				throw new ValidationError(
 					`${ORDER_PRODUCT_TYPES[line.type].label}${memoryGb === null ? '' : ` / ${memoryGb} GB`}: ${line.quantityUnit === 'piece' ? 'adet' : line.quantityUnit} birim fiyatını girin.`,
@@ -76,7 +81,9 @@ export const createOrder = async (
 					originalUnitPrice === null
 						? null
 						: Math.round((unitPrice - originalUnitPrice) * 100) / 100,
-				total: Math.round(unitPrice * line.quantity * 100) / 100,
+				total:
+					line.totalPriceOverride ??
+					Math.round(unitPrice * line.quantity * 100) / 100,
 			};
 		});
 		const unitTotals = { piece: 0, kg: 0, g: 0 };

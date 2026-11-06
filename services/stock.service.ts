@@ -192,7 +192,7 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 			signature(existing.lines) !== signature(input.lines)
 		)
 			throw new ConflictError(
-				'Bu işlem kimliği farklı bir yenilemede kullanılmış.',
+				'Bu işlem kimliği farklı bir satışta kullanılmış.',
 			);
 		return { operation: existing, isNew: false };
 	}
@@ -216,7 +216,7 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 			Math.abs(quantity - totalAvailable) > 0.0000001
 		)
 			throw new ValidationError(
-				`${label}: tam yenilemede mevcut stoğun tamamı çıkılmalıdır.`,
+				`${label}: tüm stok satışında mevcut stoğun tamamı çıkılmalıdır.`,
 			);
 		// Internal FIFO maintains purchase history. Users enter product totals only;
 		// this bookkeeping never implies supplier-specific sales or profit.

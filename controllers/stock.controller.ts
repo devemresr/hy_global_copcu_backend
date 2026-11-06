@@ -235,7 +235,7 @@ export const postSale = async (req: Request, res: Response) => {
 						: LOG_ACTIONS.STOCK_RESTOCK_PARTIAL,
 				entityType: LOG_ENTITY_TYPES.STOCK_RESTOCK,
 				entityId: null,
-				entityKey: `${operation.mode === 'complete' ? 'Tam yenileme' : 'Kısmi yenileme'} · ${operation.lines.map(productLabel).join(', ')}`,
+				entityKey: `${operation.mode === 'complete' ? 'Tüm stok satışı' : 'Kısmi satış'} · ${operation.lines.map(productLabel).join(', ')}`,
 				fields: [
 					{
 						field: 'operationId',

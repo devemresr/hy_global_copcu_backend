@@ -92,7 +92,7 @@ export const purchaseWarningSchema = z
 							.finite()
 							.min(0)
 							.max(1_000_000)
-							.multipleOf(0.01),
+							.multipleOf(0.000001),
 					})
 					.strict()
 					.superRefine(validateProduct),

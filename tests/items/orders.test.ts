@@ -39,6 +39,26 @@ const lines = [
 	{ type: 'EMCP', memoryGb: 8, quantity: 5 },
 ];
 describe('orders', () => {
+	it('rejects repeated products while allowing different memory sizes', async () => {
+		const auth = `Bearer ${(await loginAndGetTokens()).accessToken}`;
+		const line = {
+			type: 'EMMC',
+			memoryGb: 64,
+			quantity: 1,
+			unitPriceOverride: 300,
+		};
+		const duplicate = await request(app)
+			.post(ORDER_ROUTES.CREATE)
+			.set('Authorization', auth)
+			.send({ bayiId: BAYI_ID, lines: [line, line] });
+		expect(duplicate.status).toBe(400);
+		expect(await Order.countDocuments()).toBe(0);
+		const distinct = await request(app)
+			.post(ORDER_ROUTES.CREATE)
+			.set('Authorization', auth)
+			.send({ bayiId: BAYI_ID, lines: [line, { ...line, memoryGb: 128 }] });
+		expect(distinct.status).toBe(201);
+	});
 	it('filters dealer names across pages and reports and treats search punctuation literally', async () => {
 		const { accessToken } = await loginAndGetTokens();
 		const auth = `Bearer ${accessToken}`;
