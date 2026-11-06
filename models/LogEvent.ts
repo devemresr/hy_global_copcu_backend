@@ -7,6 +7,9 @@ const { Schema } = mongoose;
 // Permission-gated actions plus site-settings changes, which are head-admin
 // only and so have no permission of their own.
 export const LOG_ACTIONS = {
+	FINANCE_ENTRY_CREATE: 'finance:entry_create',
+	FINANCE_ENTRY_VOID: 'finance:entry_void',
+	FINANCE_CATEGORY_CREATE: 'finance:category_create',
 	...ACTIONS,
 	SITE_MAINTENANCE_UPDATE: 'site:maintenance_update',
 	SITE_NOTICE_UPDATE: 'site:notice_update',
@@ -22,6 +25,8 @@ export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
 // What kind of record an action was taken on - items and site settings share
 // one log collection instead of growing a near-duplicate model per entity.
 export const LOG_ENTITY_TYPES = {
+	FINANCE_ENTRY: 'finance_entry',
+	FINANCE_CATEGORY: 'finance_category',
 	ITEM: 'item',
 	ITEM_RULE: 'item_rule',
 	SITE_MAINTENANCE: 'site_maintenance',

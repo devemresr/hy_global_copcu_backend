@@ -14,6 +14,7 @@ import siteRoutes from './routes/siteRoutes';
 import orderRoutes from './routes/orderRoutes';
 import bayiRoutes from './routes/bayiRoutes';
 import stockRoutes from './routes/stockRoutes';
+import financeRoutes from './routes/financeRoutes';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 
 const app = express();
@@ -37,5 +38,6 @@ app.use(siteRoutes());
 app.use(orderRoutes());
 app.use(bayiRoutes());
 app.use(stockRoutes());
+app.use(financeRoutes());
 
 export default app;
