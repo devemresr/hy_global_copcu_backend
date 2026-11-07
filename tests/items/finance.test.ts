@@ -26,6 +26,33 @@ const finance = (query = {}) =>
 const entry = (body: object) =>
 	request(app).post('/finance/entries').set('Authorization', auth).send(body);
 describe('cash balance', () => {
+	it('filters amounts before summaries without changing global cash balance', async () => {
+		await entry({
+			requestId: randomUUID(),
+			categoryId: 'system:investment',
+			amount: 100,
+			date: '2026-11-01',
+		}).expect(201);
+		await entry({
+			requestId: randomUUID(),
+			categoryId: 'system:other',
+			amount: 40,
+			date: '2026-11-01',
+		}).expect(201);
+		const result = await finance({
+			numericFilters: JSON.stringify([{ field: 'total', min: 80, max: 120 }]),
+		}).expect(200);
+		expect(result.body).toMatchObject({
+			count: 1,
+			income: 100,
+			expenses: 0,
+			net: 100,
+			balance: 60,
+		});
+		await finance({
+			numericFilters: JSON.stringify([{ field: 'quantityPiece', min: 1 }]),
+		}).expect(400);
+	});
 	it('combines paid purchases, received sales and manual cash movements without creating inventory', async () => {
 		const purchase = await request(app)
 			.post(ORDER_ROUTES.CREATE)

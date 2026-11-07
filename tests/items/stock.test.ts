@@ -64,6 +64,61 @@ const warning = (bayiId = b, unitPrice = 450, variant = product) =>
 		.send({ bayiId, lines: [{ ...variant, unitPrice }] });
 
 describe('stock management', () => {
+	it('filters amounts for specific products and sizes before stock totals', async () => {
+		await purchase(a, 10, 100);
+		await purchase(a, 3, 500, { ...product, memoryGb: 8 });
+		const result = await stock({
+			numericFilters: JSON.stringify([
+				{
+					field: 'unitPricePiece',
+					productType: 'EMMC',
+					memoryGb: 64,
+					min: 90,
+					max: 110,
+				},
+			]),
+		}).expect(200);
+		expect(result.body.movements).toHaveLength(1);
+		expect(result.body.movements[0].memoryGb).toBe(64);
+		expect(result.body.reportTotals.purchaseCost).toBe(1000);
+	});
+	it('filters sale lines before profit aggregation while leaving global inventory unchanged', async () => {
+		await purchase(a, 10, 100);
+		await purchase(a, 10, 20, { ...product, memoryGb: 8 });
+		await request(app)
+			.post(STOCK_ROUTES.SALES)
+			.set('Authorization', auth)
+			.send({
+				requestId: randomUUID(),
+				mode: 'partial',
+				lines: [
+					{ ...product, quantity: 2, revenue: 300 },
+					{ ...product, memoryGb: 8, quantity: 3, revenue: 30 },
+				],
+			})
+			.expect(201);
+		const result = await stock({
+			movementType: 'restock',
+			numericFilters: JSON.stringify([{ field: 'profit', min: -40, max: 0 }]),
+			pageSize: 1,
+		});
+		expect(result.status).toBe(200);
+		expect(result.body.movementCount).toBe(1);
+		expect(result.body.movements[0]).toMatchObject({
+			memoryGb: 8,
+			profit: -30,
+		});
+		expect(result.body.reportTotals).toMatchObject({
+			revenue: 30,
+			profit: -30,
+		});
+		expect(result.body.profits).toHaveLength(1);
+		expect(result.body.positions).toHaveLength(2);
+		expect(
+			result.body.positions.find((p: { memoryGb: number }) => p.memoryGb === 64)
+				.quantity,
+		).toBe(8);
+	});
 	it.each([undefined, null, ''])(
 		'filters dealer names safely when a legacy purchase name is %s',
 		async (name) => {

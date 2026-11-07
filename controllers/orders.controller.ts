@@ -1,3 +1,7 @@
+import {
+	orderNumericExpression,
+	numericFieldsFor,
+} from '../schemas/numericFilters.schema';
 import type { Request, Response } from 'express';
 import { Types, type QueryFilter } from 'mongoose';
 import { requireUserId } from './auth.helper';
@@ -185,6 +189,14 @@ export const listOrders = async (
 				...(q.minTotal !== undefined ? { $gte: q.minTotal } : {}),
 				...(q.maxTotal !== undefined ? { $lte: q.maxTotal } : {}),
 			};
+		if (
+			q.numericFilters?.some(
+				(f) => !numericFieldsFor('orders').includes(f.field),
+			)
+		)
+			throw new ValidationError('Bu rapor için geçersiz sayı alanı.');
+		if (q.numericFilters?.length)
+			filter.$expr = orderNumericExpression(q.numericFilters);
 		const memoryTypes = Object.entries(ORDER_PRODUCT_TYPES)
 			.filter(([, product]) => product.requiresMemorySize)
 			.map(([type]) => type);

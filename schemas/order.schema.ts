@@ -1,3 +1,4 @@
+import { numericFiltersQuerySchema } from './numericFilters.schema';
 import { z } from 'zod';
 import {
 	ORDER_PRODUCT_TYPES,
@@ -98,6 +99,7 @@ const date = z
 export const orderQuerySchema = z
 	.object({
 		bayiName: z.string().trim().max(120).optional(),
+		numericFilters: numericFiltersQuerySchema,
 		excludeIds: z
 			.string()
 			.regex(/^[a-f\d]{24}(,[a-f\d]{24})*$/i)

@@ -1,3 +1,8 @@
+import {
+	matchesNumeric,
+	productNumericValues,
+	numericFieldsFor,
+} from '../schemas/numericFilters.schema';
 import type { Request, Response } from 'express';
 import { orderQuerySchema } from '../schemas/order.schema';
 import {
@@ -57,6 +62,12 @@ export const getStock = async (req: Request, res: Response) => {
 				selectionResult.error.issues.map((issue) => issue.message).join(' '),
 			);
 		const selection = selectionResult.data;
+		if (
+			query.numericFilters?.some(
+				(f) => !numericFieldsFor('stock').includes(f.field),
+			)
+		)
+			throw new ValidationError('Bu rapor için geçersiz sayı alanı.');
 		const [state, listPurchasePrices] = await Promise.all([
 			loadStock(),
 			loadPurchasePrices(),
@@ -85,7 +96,15 @@ export const getStock = async (req: Request, res: Response) => {
 					lot.bayiName
 						.toLocaleLowerCase('tr')
 						.includes(query.bayiName.toLocaleLowerCase('tr'))) &&
-				inRange(lot.createdAt, lot.orderTotal),
+				inRange(lot.createdAt, lot.orderTotal) &&
+				matchesNumeric(
+					query.numericFilters,
+					{
+						...productNumericValues(lot),
+						total: lot.orderTotal,
+					},
+					lot,
+				),
 		);
 		const positions = [...new Set(state.lots.map(stockProductKey))].map(
 			(key) => {
@@ -131,7 +150,18 @@ export const getStock = async (req: Request, res: Response) => {
 			)
 			.map((operation) => ({
 				...operation,
-				lines: operation.lines.filter(matchesProduct),
+				lines: operation.lines.filter(
+					(line) =>
+						matchesProduct(line) &&
+						matchesNumeric(
+							query.numericFilters,
+							{
+								...productNumericValues(line),
+								total: operation.totalRevenue,
+							},
+							line,
+						),
+				),
 			}))
 			.filter((operation) => operation.lines.length > 0);
 		const sales = operations.flatMap((operation) =>

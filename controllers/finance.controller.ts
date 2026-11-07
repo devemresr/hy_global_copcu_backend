@@ -1,3 +1,4 @@
+import { matchesNumeric } from '../schemas/numericFilters.schema';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
@@ -109,6 +110,10 @@ export const getFinance = async (req: Request, res: Response) => {
 	try {
 		const query = parse(orderQuerySchema, req.query),
 			selection = parse(selectionSchema, req.query);
+		if (query.numericFilters?.some((f) => f.field !== 'total'))
+			throw new ValidationError(
+				'Bakiye için yalnızca işlem tutarı filtrelenebilir.',
+			);
 		const [purchase, sales, legacy, manual, subtypes] = await Promise.all([
 			Order.find().select('name total createdAt').lean(),
 			StockRestock.find().select('requestId totalRevenue createdAt').lean(),
@@ -166,6 +171,9 @@ export const getFinance = async (req: Request, res: Response) => {
 			expense(row.group) ? -row.amountCents : row.amountCents;
 		const matching = rows.filter(
 			(row) =>
+				matchesNumeric(query.numericFilters, {
+					total: row.amountCents / 100,
+				}) &&
 				(!selection.group || row.group === selection.group) &&
 				(!selection.categoryId || row.categoryId === selection.categoryId) &&
 				(!selection.direction ||

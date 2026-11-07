@@ -39,6 +39,125 @@ const lines = [
 	{ type: 'EMCP', memoryGb: 8, quantity: 5 },
 ];
 describe('orders', () => {
+	it('applies numeric criteria to the same product before pagination and report aggregation', async () => {
+		const auth = 'Bearer ' + (await loginAndGetTokens()).accessToken;
+		await request(app)
+			.post(ORDER_ROUTES.CREATE)
+			.set('Authorization', auth)
+			.send({
+				bayiId: BAYI_ID,
+				lines: [
+					{ type: 'EMMC', memoryGb: 8, quantity: 1, unitPriceOverride: 40 },
+					{ type: 'EMCP', memoryGb: 64, quantity: 9, unitPriceOverride: 600 },
+				],
+			})
+			.expect(201);
+		await request(app)
+			.post(ORDER_ROUTES.CREATE)
+			.set('Authorization', auth)
+			.send({
+				bayiId: BAYI_ID,
+				lines: [
+					{ type: 'EMMC', memoryGb: 8, quantity: 3, unitPriceOverride: 40 },
+				],
+			})
+			.expect(201);
+		const numericFilters = [
+			{ field: 'memoryGb', min: 8, max: 8 },
+			{ field: 'quantityPiece', min: 2 },
+		];
+		const result = await request(app)
+			.get(ORDER_ROUTES.LIST)
+			.set('Authorization', auth)
+			.query({ numericFilters: JSON.stringify(numericFilters), pageSize: 1 })
+			.expect(200);
+		expect(result.body.summary).toMatchObject({ count: 1, total: 120 });
+		const scoped = await request(app)
+			.get(ORDER_ROUTES.LIST)
+			.set('Authorization', auth)
+			.query({
+				numericFilters: JSON.stringify([
+					{
+						field: 'unitPricePiece',
+						productType: 'EMMC',
+						memoryGb: 8,
+						max: 45,
+					},
+					{ field: 'quantityPiece', productType: 'EMCP', memoryGb: 64, min: 9 },
+				]),
+			})
+			.expect(200);
+		expect(scoped.body.summary).toMatchObject({ count: 1, total: 5440 });
+
+		const recordTotals = await request(app)
+			.get(ORDER_ROUTES.LIST)
+			.set('Authorization', auth)
+			.query({
+				numericFilters: JSON.stringify([
+					{ field: 'lineCount', min: 2 },
+					{ field: 'recordPiece', min: 10, max: 10 },
+				]),
+			})
+			.expect(200);
+		expect(recordTotals.body.summary).toMatchObject({ count: 1, total: 5440 });
+
+		expect(result.body.byTypeAndMemory).toMatchObject([
+			{ type: 'EMMC', memoryGb: 8, total: 120, quantity: 3 },
+		]);
+		const pdf = await request(app)
+			.post(ORDER_ROUTES.REPORT)
+			.set('Authorization', auth)
+			.send({ numericFilters, pageSize: 1 })
+			.expect(200);
+		expect(pdf.body.summary).toMatchObject(result.body.summary);
+		await request(app)
+			.get(ORDER_ROUTES.LIST)
+			.set('Authorization', auth)
+			.query({ numericFilters: 'invalid json' })
+			.expect(400);
+		await request(app)
+			.get(ORDER_ROUTES.LIST)
+			.set('Authorization', auth)
+			.query({ numericFilters: JSON.stringify([{ field: '$where', min: 0 }]) })
+			.expect(400);
+	});
+	it('normalizes weight-based quantity and unit-price conditions without matching piece counts', async () => {
+		const auth = 'Bearer ' + (await loginAndGetTokens()).accessToken;
+		await request(app)
+			.post(ORDER_ROUTES.CREATE)
+			.set('Authorization', auth)
+			.send({
+				bayiId: BAYI_ID,
+				lines: [
+					{
+						type: 'IPHONE',
+						quantity: 500,
+						quantityUnit: 'g',
+						unitPriceOverride: 2,
+					},
+				],
+			})
+			.expect(201);
+		const match = await request(app)
+			.get(ORDER_ROUTES.LIST)
+			.set('Authorization', auth)
+			.query({
+				numericFilters: JSON.stringify([
+					{ field: 'quantityKg', min: 0.5, max: 0.5 },
+					{ field: 'unitPriceKg', min: 2000, max: 2000 },
+				]),
+			})
+			.expect(200);
+		expect(match.body.summary.count).toBe(1);
+		const pieces = await request(app)
+			.get(ORDER_ROUTES.LIST)
+			.set('Authorization', auth)
+			.query({
+				numericFilters: JSON.stringify([{ field: 'quantityPiece', min: 0 }]),
+			})
+			.expect(200);
+		expect(pieces.body.summary.count).toBe(0);
+	});
 	it('rejects repeated products while allowing different memory sizes', async () => {
 		const auth = `Bearer ${(await loginAndGetTokens()).accessToken}`;
 		const line = {
