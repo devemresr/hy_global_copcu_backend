@@ -106,7 +106,11 @@ export const createOrder = async (
 			createdBy: requireUserId(req),
 		});
 		const warnings = await withStockWrite(async () => {
-			const claims = await checkPurchaseWarnings(input.bayiId, lines);
+			const claims = await checkPurchaseWarnings(
+				input.bayiId,
+				lines,
+				input.comparisonDays,
+			);
 			await order.save();
 			return claims;
 		});

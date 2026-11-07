@@ -266,8 +266,11 @@ export function recordStockSale(input: StockSaleInput, userId: string) {
 
 export async function inspectPurchaseWarnings(
 	bayiId: string,
-	lines: (Product & { unitPrice: number })[],
+	lines: (Product & { unitPrice: number; quantity?: number })[],
+	comparisonDays = 30,
 ) {
+	const now = Date.now();
+	const since = now - comparisonDays * 86400000;
 	const [bayi, purchaseCount, state] = await Promise.all([
 		Bayi.findById(bayiId).lean(),
 		Order.countDocuments({ bayiId }),
@@ -290,7 +293,10 @@ export async function inspectPurchaseWarnings(
 	for (const line of lines) {
 		const key = stockProductKey(line);
 		const sales = state.book.sales.filter(
-			(sale) => stockProductKey(sale) === key,
+			(sale) =>
+				stockProductKey(sale) === key &&
+				sale.createdAt.getTime() >= since &&
+				sale.createdAt.getTime() <= now,
 		);
 		const soldQuantity = sales.reduce((sum, sale) => sum + sale.quantity, 0);
 		const sellingPrice =
@@ -299,7 +305,7 @@ export async function inspectPurchaseWarnings(
 				: undefined;
 		const purchasePrice = normalizedPrice(line.unitPrice, line.quantityUnit);
 		const product = ORDER_PRODUCT_TYPES[line.type as ProductType];
-		const label = `${product.label}${product.requiresMemorySize ? ` ${line.memoryGb} GB` : ''} (${line.quantityUnit === 'piece' ? 'adet' : 'kg'})`;
+		const label = `${product.label}${product.requiresMemorySize ? ` ${line.memoryGb} GB` : ''} (${(line.quantity ?? 1).toLocaleString('tr-TR')} ${!line.quantityUnit || line.quantityUnit === 'piece' ? 'adet' : line.quantityUnit})`;
 		if (sellingPrice === undefined) {
 			if (!missingPrices.includes(label)) missingPrices.push(label);
 			continue;
@@ -326,7 +332,7 @@ export async function inspectPurchaseWarnings(
 		} catch (error) {
 			if ((error as { code?: number }).code !== 11000) throw error;
 		}
-		const message = `${bayi.name} · ${label}: alış fiyatı (${purchasePrice.toLocaleString('tr-TR')} TL) satış fiyatından (${sellingPrice.toLocaleString('tr-TR')} TL) yüksek. Bu bayiden alım zarar ettirebilir.`;
+		const message = `${bayi.name} · ${label}: alış fiyatı (${purchasePrice.toLocaleString('tr-TR')} TL) son ${comparisonDays} günün ortalama satış fiyatından (${sellingPrice.toLocaleString('tr-TR')} TL) yüksek. Bu bayiden alım zarar ettirebilir.`;
 		risks.push({ productKey: key, message, alreadyWarned: !firstClaim });
 		if (firstClaim) warnings.push({ productKey: key, message });
 	}
@@ -335,7 +341,9 @@ export async function inspectPurchaseWarnings(
 
 export async function checkPurchaseWarnings(
 	bayiId: string,
-	lines: (Product & { unitPrice: number })[],
+	lines: (Product & { unitPrice: number; quantity?: number })[],
+	comparisonDays = 30,
 ) {
-	return (await inspectPurchaseWarnings(bayiId, lines)).warnings;
+	return (await inspectPurchaseWarnings(bayiId, lines, comparisonDays))
+		.warnings;
 }

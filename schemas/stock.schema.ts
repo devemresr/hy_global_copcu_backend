@@ -81,12 +81,14 @@ export const stockSaleSchema = z
 	});
 export const purchaseWarningSchema = z
 	.object({
+		comparisonDays: z.number().int().min(1).max(36500).default(30),
 		bayiId: z.string().regex(/^[a-f\d]{24}$/i),
 		lines: z
 			.array(
 				z
 					.object({
 						...product,
+						quantity: z.number().finite().positive().max(1_000_000).default(1),
 						unitPrice: z
 							.number()
 							.finite()

@@ -64,6 +64,51 @@ const warning = (bayiId = b, unitPrice = 450, variant = product) =>
 		.send({ bayiId, lines: [{ ...variant, unitPrice }] });
 
 describe('stock management', () => {
+	it('uses a bounded weighted sales average and reports the entered quantity when the period has no sales', async () => {
+		await purchase(a, 20, 100);
+		await sell({ mode: 'partial', quantity: 2, revenue: 200 }).expect(201);
+		const old = (await StockRestock.findOne())!;
+		await StockRestock.updateOne(
+			{ _id: old._id },
+			{ $set: { createdAt: new Date(Date.now() - 45 * 86400000) } },
+		);
+		await sell({ mode: 'partial', quantity: 3, revenue: 900 }).expect(201);
+		const recent = (await StockRestock.findOne({ _id: { $ne: old._id } }))!;
+		await StockRestock.updateOne(
+			{ _id: recent._id },
+			{ $set: { createdAt: new Date(Date.now() - 2 * 86400000) } },
+		);
+		const inspect = (comparisonDays?: number) =>
+			request(app)
+				.post(STOCK_ROUTES.WARNINGS)
+				.set('Authorization', auth)
+				.send({
+					bayiId: b,
+					comparisonDays,
+					lines: [{ ...product, quantity: 7, unitPrice: 250 }],
+				});
+		const defaultWindow = await inspect().expect(200);
+		expect(defaultWindow.body.risks).toEqual([]);
+		expect(defaultWindow.body.missingPrices).toEqual([]);
+		const sixty = await inspect(60).expect(200);
+		expect(sixty.body.risks).toHaveLength(1);
+		expect(sixty.body.risks[0].message).toContain('son 60 günün');
+		expect(sixty.body.risks[0].message).toContain('(7 adet)');
+		const empty = await inspect(1).expect(200);
+		expect(empty.body.risks).toEqual([]);
+		expect(empty.body.missingPrices).toEqual(['eMMC 64 GB (7 adet)']);
+		await inspect(0).expect(400);
+		const saved = await request(app)
+			.post(ORDER_ROUTES.CREATE)
+			.set('Authorization', auth)
+			.send({
+				bayiId: a,
+				comparisonDays: 30,
+				lines: [{ ...product, quantity: 1, unitPriceOverride: 250 }],
+			})
+			.expect(201);
+		expect(saved.body.warnings).toEqual([]);
+	});
 	it('filters amounts for specific products and sizes before stock totals', async () => {
 		await purchase(a, 10, 100);
 		await purchase(a, 3, 500, { ...product, memoryGb: 8 });
@@ -326,7 +371,7 @@ describe('stock management', () => {
 	});
 	it('reports missing selling prices and keeps existing risks visible without repeating toasts', async () => {
 		const missing = await warning();
-		expect(missing.body.missingPrices).toEqual(['eMMC 64 GB (adet)']);
+		expect(missing.body.missingPrices).toEqual(['eMMC 64 GB (1 adet)']);
 		expect(missing.body.warnings).toHaveLength(0);
 		await purchase(a, 1, 300);
 		expect((await sell({ quantity: 1, revenue: 400 })).status).toBe(201);

@@ -78,6 +78,7 @@ export const orderLineSchema = z
 	});
 export const createOrderSchema = z
 	.object({
+		comparisonDays: z.number().int().min(1).max(36500).default(30),
 		bayiId: z.string().regex(/^[a-f\d]{24}$/i, 'Bir bayi seçin.'),
 		lines: z.array(orderLineSchema).min(1).max(200),
 	})

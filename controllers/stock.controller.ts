@@ -302,7 +302,13 @@ export const postSale = async (req: Request, res: Response) => {
 export const postPurchaseWarnings = async (req: Request, res: Response) => {
 	try {
 		const input = purchaseWarningSchema.parse(req.body);
-		res.json(await inspectPurchaseWarnings(input.bayiId, input.lines));
+		res.json(
+			await inspectPurchaseWarnings(
+				input.bayiId,
+				input.lines,
+				input.comparisonDays,
+			),
+		);
 	} catch (error) {
 		handleHttpError(error, res, logger);
 	}
