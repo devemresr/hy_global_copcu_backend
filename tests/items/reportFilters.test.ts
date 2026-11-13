@@ -76,7 +76,7 @@ it('filters purchase totals by multiple bayi IDs, product scope and inclusive da
 	const result = await query('/orders', {
 		pageSize: 1,
 		numericFilters: JSON.stringify([
-			{ field: 'lineTotal', productType: 'EMMC', memoryGb: 8, min: 0 },
+			{ field: 'productMatch', productType: 'EMMC', memoryGb: 8 },
 		]),
 	}).expect(200);
 	expect(result.body.summary).toMatchObject({ count: 2, total: 140 });
@@ -93,7 +93,7 @@ it('filters purchase totals by multiple bayi IDs, product scope and inclusive da
 it('filters stock supplier quantities and profits without duplicating sale lines or altering inventory', async () => {
 	const result = await query('/stock', {
 		numericFilters: JSON.stringify([
-			{ field: 'lineTotal', productType: 'EMMC', min: 0 },
+			{ field: 'productMatch', productType: 'EMMC' },
 		]),
 	}).expect(200);
 	expect(result.body.reportTotals).toMatchObject({

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const NUMERIC_FIELDS = {
 	total: 'İşlem toplamı (TL)',
-	lineTotal: 'Ürün toplamı (TL)',
+	productMatch: 'Ek sayısal koşul yok',
 	recordPiece: 'Alış toplam miktarı (adet)',
 	recordKg: 'Alış toplam miktarı (kg)',
 	recordG: 'Alış toplam miktarı (g)',
@@ -42,7 +42,9 @@ export const numericFilterSchema = z
 	.strict()
 	.refine(
 		(v) =>
-			(v.min !== undefined || v.max !== undefined) &&
+			(v.field === 'productMatch'
+				? v.min === undefined && v.max === undefined
+				: v.min !== undefined || v.max !== undefined) &&
 			(v.min === undefined || v.max === undefined || v.min <= v.max),
 		'Geçerli bir sayı aralığı girin.',
 	)
@@ -92,6 +94,7 @@ export function matchesNumeric(
 	product?: { type: string; memoryGb?: number | null },
 ) {
 	const test = (f: NumericFilter) => {
+		if (f.field === 'productMatch') return true;
 		const value = values[f.field];
 		return (
 			value != null &&
@@ -132,7 +135,6 @@ export function productNumericValues(line: {
 	const cost = line.costOfGoods ?? line.total;
 	const values: Partial<Record<NumericField, number | null | undefined>> = {
 		memoryGb: line.memoryGb,
-		lineTotal: line.total ?? line.revenue,
 		purchaseCost: cost,
 		revenue: line.revenue,
 		profit:
@@ -206,7 +208,6 @@ export function orderNumericExpression(filters: NumericFilter[]) {
 	};
 	const lineValue = (f: NumericFilter): unknown => {
 		if (f.field === 'memoryGb') return '$$line.memoryGb';
-		if (f.field === 'lineTotal') return '$$line.total';
 		if (f.field === 'totalAdjustment')
 			return { $multiply: ['$$line.priceAdjustment', '$$line.quantity'] };
 		const match =
@@ -260,7 +261,9 @@ export function orderNumericExpression(filters: NumericFilter[]) {
 									...(group[0].memoryGb === undefined
 										? []
 										: [{ $eq: ['$$line.memoryGb', group[0].memoryGb] }]),
-									...group.map((f) => predicate(f, lineValue(f))),
+									...group
+										.filter((f) => f.field !== 'productMatch')
+										.map((f) => predicate(f, lineValue(f))),
 								],
 							},
 						},
