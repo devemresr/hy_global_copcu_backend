@@ -1,3 +1,8 @@
+import {
+	loadPartyDirectory,
+	resolveLogPartyIdentity,
+	type PartyIdentityEvent,
+} from '../services/partyIdentity.service';
 import type { Request, Response } from 'express';
 import { LogEvent, LOG_ENTITY_TYPES } from '../models/LogEvent';
 import type { PipelineStage } from 'mongoose';
@@ -37,7 +42,8 @@ export const listLogEvents = async (
 ): Promise<void> => {
 	const log = logger.child({ method: 'listLogEvents' });
 	try {
-		const { page, pageSize, types, model, caseSensitive } = parseQuery(req);
+		const { page, pageSize, types, model, caseSensitive, bayiId, investorId } =
+			parseQuery(req);
 		log.debug(
 			{ page, pageSize, types, model, caseSensitive },
 			'Listing log events',
@@ -57,8 +63,39 @@ export const listLogEvents = async (
 			});
 		}
 
+		const parties = await loadPartyDirectory();
+		const identity = (event: PartyIdentityEvent) =>
+			resolveLogPartyIdentity(event, parties);
+		if (bayiId || investorId) {
+			const candidates = await LogEvent.find({
+				entityType: {
+					$in: [
+						'bayi',
+						'investor',
+						'stock_purchase',
+						'stock_restock',
+						'finance_entry',
+					],
+				},
+			}).lean();
+			const ids = candidates
+				.filter((event) => {
+					const party = identity(event);
+					return (
+						(!bayiId ||
+							party.bayiId === bayiId ||
+							party.bayis.some((row) => row.bayiId === bayiId)) &&
+						(!investorId || party.investorId === investorId)
+					);
+				})
+				.map((event) => event._id);
+			filter.push({ $match: { _id: { $in: ids } } });
+		}
 		const [groupsPage, totalCount] = await Promise.all([
-			LogEvent.aggregate<{ events: unknown[]; latestCreatedAt: Date }>([
+			LogEvent.aggregate<{
+				events: PartyIdentityEvent[];
+				latestCreatedAt: Date;
+			}>([
 				...filter,
 				{ $sort: { createdAt: -1 } },
 				{
@@ -79,7 +116,9 @@ export const listLogEvents = async (
 			]).then((result) => result[0]?.total ?? 0),
 		]);
 
-		const events = groupsPage.flatMap((group) => group.events);
+		const events = groupsPage.flatMap((group) =>
+			group.events.map((event) => ({ ...event, ...identity(event) })),
+		);
 		log.debug(
 			{ page, pageSize, total: totalCount, returned: events.length },
 			'Log events listed',

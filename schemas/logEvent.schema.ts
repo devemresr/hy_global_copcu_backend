@@ -7,6 +7,11 @@ const MAX_PAGE_SIZE = 100;
 // z.coerce.number() turns the string query params Express always hands back
 // ("2") into actual numbers before the min/int/max checks run.
 export const logEventsQuerySchema = z.object({
+	bayiId: z
+		.string()
+		.regex(/^[a-f\d]{24}$/i)
+		.optional(),
+	investorId: z.string().uuid().optional(),
 	model: z.string().trim().max(500).optional().default(''),
 	caseSensitive: z
 		.enum(['true', 'false'])

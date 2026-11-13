@@ -7,9 +7,14 @@ const { Schema } = mongoose;
 // Permission-gated actions plus site-settings changes, which are head-admin
 // only and so have no permission of their own.
 export const LOG_ACTIONS = {
+	BAYI_CREATE: 'bayi:create',
+	BAYI_UPDATE: 'bayi:update',
+	INVESTOR_CREATE: 'finance:investor_create',
+	INVESTOR_UPDATE: 'finance:investor_update',
 	FINANCE_ENTRY_CREATE: 'finance:entry_create',
 	FINANCE_ENTRY_VOID: 'finance:entry_void',
 	FINANCE_CATEGORY_CREATE: 'finance:category_create',
+	FINANCE_CATEGORY_UPDATE: 'finance:category_update',
 	...ACTIONS,
 	SITE_MAINTENANCE_UPDATE: 'site:maintenance_update',
 	SITE_NOTICE_UPDATE: 'site:notice_update',
@@ -25,6 +30,8 @@ export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
 // What kind of record an action was taken on - items and site settings share
 // one log collection instead of growing a near-duplicate model per entity.
 export const LOG_ENTITY_TYPES = {
+	BAYI: 'bayi',
+	INVESTOR: 'investor',
 	FINANCE_ENTRY: 'finance_entry',
 	FINANCE_CATEGORY: 'finance_category',
 	ITEM: 'item',
@@ -76,6 +83,22 @@ const logEventSchema = new Schema<TimeStampedLogEvent>(
 		// Human-readable identity at the time of the action - a delete leaves
 		// nothing left to join back to through entityId.
 		entityKey: { type: String, required: true },
+		bayiId: { type: Schema.Types.ObjectId, ref: 'Bayi', default: null },
+		bayiName: { type: String, default: null },
+		bayis: {
+			type: [
+				new Schema(
+					{
+						bayiId: { type: String, default: null },
+						bayiName: { type: String, default: '' },
+					},
+					{ _id: false },
+				),
+			],
+			default: undefined,
+		},
+		investorId: { type: String, default: null },
+		investorName: { type: String, default: null },
 		fields: { type: [fieldChangeSchema], default: [] },
 		// Shared by every row a single bulk request touches (see
 		// items.controller.ts's bulkUpdateItems), null for anything else - lets
@@ -87,6 +110,10 @@ const logEventSchema = new Schema<TimeStampedLogEvent>(
 	},
 	{ timestamps: true, collection: 'log_events' },
 );
+
+logEventSchema.index({ bayiId: 1, createdAt: -1 });
+logEventSchema.index({ 'bayis.bayiId': 1, createdAt: -1 });
+logEventSchema.index({ investorId: 1, createdAt: -1 });
 
 export const LogEvent = mongoose.model<TimeStampedLogEvent>(
 	'LogEvent',
@@ -100,6 +127,11 @@ export type LogEventData = {
 	entityType: LogEntityType;
 	entityId: Types.ObjectId | null;
 	entityKey: string;
+	bayiId?: Types.ObjectId | null;
+	bayiName?: string | null;
+	bayis?: { bayiId?: string | null; bayiName: string }[] | null;
+	investorId?: string | null;
+	investorName?: string | null;
 	fields: FieldChange[];
 	batchId?: string | null;
 	version?: number | null;

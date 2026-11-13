@@ -1,3 +1,8 @@
+import { preserveLegacyPartyLinks } from '../services/partyIdentity.service';
+import { User } from '../models/User';
+import { requireUserId } from './auth.helper';
+import { LOG_ACTIONS, LOG_ENTITY_TYPES } from '../models/LogEvent';
+import { recordLogEvent } from '../services/logEvents/recordLogEvent.service';
 import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { Bayi } from '../models/Bayi';
@@ -82,8 +87,8 @@ async function saveBayi(
 		const id = update ? String(req.params.id) : undefined;
 		if (id && !/^[a-f\d]{24}$/i.test(id))
 			throw new ValidationError('Geçersiz bayi kimliği.');
-		if (id && !(await Bayi.exists({ _id: id })))
-			throw new NotFoundError('Bayi');
+		const previous = id ? await Bayi.findById(id).lean() : null;
+		if (id && !previous) throw new NotFoundError('Bayi');
 		key = {
 			nameKey: normalizeBayiName(input.data.name),
 			phone: input.data.phone,
@@ -92,6 +97,7 @@ async function saveBayi(
 		await Bayi.init();
 		const duplicate = await duplicateError(key.nameKey, key.phone, id);
 		if (duplicate) throw duplicate;
+		if (id) await preserveLegacyPartyLinks('bayi', id);
 		const data = { ...input.data, nameKey: key.nameKey };
 		const bayi = id
 			? await Bayi.findByIdAndUpdate(id, data, {
@@ -100,6 +106,31 @@ async function saveBayi(
 				})
 			: await Bayi.create(data);
 		if (!bayi) throw new NotFoundError('Bayi');
+		const adminId = requireUserId(req);
+		const actor = await User.findById(adminId).select('username').lean();
+		if (actor)
+			await recordLogEvent({
+				adminId,
+				adminUsername: actor.username,
+				action: update ? LOG_ACTIONS.BAYI_UPDATE : LOG_ACTIONS.BAYI_CREATE,
+				entityType: LOG_ENTITY_TYPES.BAYI,
+				entityId: String(bayi._id),
+				entityKey: bayi.name,
+				bayiId: String(bayi._id),
+				bayiName: bayi.name,
+				fields: [
+					{
+						field: 'name',
+						previousValue: previous?.name ?? null,
+						newValue: bayi.name,
+					},
+					{
+						field: 'phone',
+						previousValue: previous?.phone ?? null,
+						newValue: bayi.phone,
+					},
+				],
+			});
 		res.status(update ? 200 : 201).json({ bayi: publicBayi(bayi) });
 	} catch (error) {
 		// Unique indexes also protect simultaneous requests. Return the same

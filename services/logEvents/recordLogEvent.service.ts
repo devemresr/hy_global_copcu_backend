@@ -15,6 +15,11 @@ type RecordLogEventInput = {
 	entityType: LogEntityType;
 	entityId: string | null;
 	entityKey: string;
+	bayiId?: string | null;
+	bayiName?: string | null;
+	bayis?: { bayiId?: string | null; bayiName: string }[];
+	investorId?: string | null;
+	investorName?: string | null;
 	fields: FieldChange[];
 	// Shared across every recordLogEvent call from the same bulk request - see
 	// LogEvent model's own comment.
