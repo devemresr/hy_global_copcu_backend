@@ -54,7 +54,15 @@ const sell = (body: Record<string, unknown>) => {
 		.send({
 			requestId,
 			mode,
-			lines: [{ ...product, quantity: 40, revenue: 16000, ...line }],
+			lines: [
+				{
+					...product,
+					...(mode === 'partial' ? { bayiId: a } : {}),
+					quantity: 40,
+					revenue: 16000,
+					...line,
+				},
+			],
 		});
 };
 const warning = (bayiId = b, unitPrice = 450, variant = product) =>
@@ -64,6 +72,40 @@ const warning = (bayiId = b, unitPrice = 450, variant = product) =>
 		.send({ bayiId, lines: [{ ...variant, unitPrice }] });
 
 describe('stock management', () => {
+	it('keeps weighted memory stock separate from pieces and converts grams for sales', async () => {
+		await purchase(a, 5, 10);
+		await purchase(a, 500, 2, { ...product, quantityUnit: 'g' });
+		const result = await stock().expect(200);
+		expect(result.body.positions).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					type: 'EMMC',
+					memoryGb: 64,
+					quantityUnit: 'piece',
+					quantity: 5,
+				}),
+				expect.objectContaining({
+					type: 'EMMC',
+					memoryGb: 64,
+					quantityUnit: 'kg',
+					quantity: 0.5,
+				}),
+			]),
+		);
+		await sell({
+			mode: 'partial',
+			quantity: 250,
+			quantityUnit: 'g',
+			revenue: 750,
+		}).expect(201);
+		const remaining = await stock().expect(200);
+		expect(remaining.body.positions).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ quantityUnit: 'piece', quantity: 5 }),
+				expect.objectContaining({ quantityUnit: 'kg', quantity: 0.25 }),
+			]),
+		);
+	});
 	it('uses a bounded weighted sales average and reports the entered quantity when the period has no sales', async () => {
 		await purchase(a, 20, 100);
 		await sell({ mode: 'partial', quantity: 2, revenue: 200 }).expect(201);
@@ -137,8 +179,8 @@ describe('stock management', () => {
 				requestId: randomUUID(),
 				mode: 'partial',
 				lines: [
-					{ ...product, quantity: 2, revenue: 300 },
-					{ ...product, memoryGb: 8, quantity: 3, revenue: 30 },
+					{ ...product, bayiId: a, quantity: 2, revenue: 300 },
+					{ ...product, bayiId: a, memoryGb: 8, quantity: 3, revenue: 30 },
 				],
 			})
 			.expect(201);
@@ -289,6 +331,7 @@ describe('stock management', () => {
 				lines: [
 					{
 						type: 'EMMC',
+						bayiId: a,
 						memoryGb: 8,
 						quantityUnit: 'piece',
 						quantity: 2,
@@ -296,6 +339,7 @@ describe('stock management', () => {
 					},
 					{
 						type: 'EMMC',
+						bayiId: b,
 						memoryGb: 16,
 						quantityUnit: 'piece',
 						quantity: 1,
@@ -303,6 +347,7 @@ describe('stock management', () => {
 					},
 					{
 						type: 'EMCP',
+						bayiId: a,
 						memoryGb: 8,
 						quantityUnit: 'piece',
 						quantity: 1,
@@ -397,11 +442,17 @@ describe('stock management', () => {
 				requestId,
 				mode,
 				lines: [
-					{ ...product, quantity: mode === 'complete' ? 5 : 2, revenue: 2000 },
+					{
+						...product,
+						bayiId: a,
+						quantity: mode === 'complete' ? 5 : 2,
+						revenue: 2000,
+					},
 					{
 						type: 'EMCP',
 						memoryGb: 8,
 						quantityUnit: 'piece',
+						bayiId: b,
 						quantity: mode === 'complete' ? 3 : 1,
 						revenue: 300,
 					},
@@ -453,7 +504,7 @@ describe('stock management', () => {
 			memoryGb: 8,
 			quantityUnit: 'piece',
 		});
-		const first = { ...product, quantity: 2, revenue: 800 };
+		const first = { ...product, bayiId: a, quantity: 2, revenue: 800 };
 		for (const lines of [
 			[
 				first,
@@ -462,6 +513,7 @@ describe('stock management', () => {
 					memoryGb: 8,
 					quantityUnit: 'piece',
 					quantity: 4,
+					bayiId: b,
 					revenue: 100,
 				},
 			],
@@ -535,17 +587,28 @@ describe('stock management', () => {
 		});
 		expect(report.body.profits[0]).not.toHaveProperty('bayiId');
 	});
-	it('deducts partial quantities from product totals without supplier/order selection', async () => {
+	it('requires a supplier for partial sales and deducts only its stock using its own cost', async () => {
 		await purchase(a, 30, 300);
 		await purchase(b, 10, 450);
-		const result = await sell({ mode: 'partial', quantity: 10, revenue: 4000 });
+		await sell({
+			mode: 'partial',
+			bayiId: undefined,
+			quantity: 10,
+			revenue: 4000,
+		}).expect(400);
+		const result = await sell({
+			mode: 'partial',
+			bayiId: a,
+			quantity: 10,
+			revenue: 4000,
+		});
 		expect(result.status).toBe(201);
-		expect(result.body.operation.lines[0].costOfGoods).toBe(3375);
+		expect(result.body.operation.lines[0].costOfGoods).toBe(3000);
 		const report = await stock({ bayiName: 'Store A', minTotal: 8000 });
 		expect(report.body.lots).toHaveLength(1);
 		expect(report.body.positions[0]).toMatchObject({
 			quantity: 30,
-			averagePurchaseCost: 337.5,
+			averagePurchaseCost: 350,
 		});
 		const all = await stock();
 		expect(
@@ -687,4 +750,71 @@ describe('stock management', () => {
 		expect((await sell({ quantityUnit: 'kg' })).status).toBe(400);
 		expect((await stock({ from: '2026-02-30' })).status).toBe(400);
 	});
+});
+
+it('uses all matching sales for inventory averages before pagination and preserves current inventory', async () => {
+	await purchase(a, 20, 100);
+	await Order.collection.updateMany(
+		{},
+		{ $set: { createdAt: new Date('2026-10-31T09:00:00Z') } },
+	);
+	const records = [
+		{
+			date: '2026-11-01T09:00:00Z',
+			mode: 'partial',
+			quantity: 2,
+			revenue: 200,
+		},
+		{
+			date: '2026-11-05T09:00:00Z',
+			mode: 'partial',
+			quantity: 3,
+			revenue: 900,
+		},
+		{
+			date: '2026-11-08T09:00:00Z',
+			mode: 'complete',
+			quantity: 15,
+			revenue: 1500,
+		},
+	];
+	for (const { date, ...input } of records) {
+		const requestId = randomUUID();
+		await sell({ requestId, ...input }).expect(201);
+		await StockRestock.updateOne(
+			{ requestId },
+			{ $set: { createdAt: new Date(date) } },
+		);
+	}
+	const all = await stock({ pageSize: 1 }).expect(200);
+	expect(all.body.positions[0]).toMatchObject({
+		quantity: 0,
+		averageSellingPrice: 130,
+	});
+	expect(
+		(await stock({ from: '2026-11-05', until: '2026-11-05' })).body.positions[0]
+			.averageSellingPrice,
+	).toBe(300);
+	expect(
+		(await stock({ movementType: 'partial' })).body.positions[0]
+			.averageSellingPrice,
+	).toBe(220);
+	expect(
+		(await stock({ movementType: 'purchase' })).body.positions[0]
+			.averageSellingPrice,
+	).toBeNull();
+	expect(
+		(await stock({ bayiName: 'Store A' })).body.positions[0]
+			.averageSellingPrice,
+	).toBeNull();
+	expect(
+		(await stock({ productType: 'EMCP' })).body.positions[0]
+			.averageSellingPrice,
+	).toBeNull();
+	const numeric = await stock({
+		numericFilters: JSON.stringify([
+			{ field: 'quantityPiece', min: 3, productType: 'EMMC', memoryGb: 64 },
+		]),
+	});
+	expect(numeric.body.positions[0].averageSellingPrice).toBeCloseTo(2400 / 18);
 });

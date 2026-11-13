@@ -1,3 +1,4 @@
+import { loadPartyDirectory } from './partyIdentity.service';
 import { Order } from '../models/Order';
 import { StockSale } from '../models/StockSale';
 import { StockRestock } from '../models/StockRestock';
@@ -6,7 +7,7 @@ import { Bayi } from '../models/Bayi';
 import { ConflictError, ValidationError } from '../errors/HttpError';
 import { ORDER_PRODUCT_TYPES } from '../constants/orderProducts.constant';
 import type { StockSaleInput } from '../schemas/stock.schema';
-import type { Types } from 'mongoose';
+import { Types } from 'mongoose';
 
 type ProductType = keyof typeof ORDER_PRODUCT_TYPES;
 type Product = {
@@ -14,7 +15,17 @@ type Product = {
 	memoryGb?: number | null;
 	quantityUnit?: string;
 };
+export type SupplierSale = {
+	bayiId?: string | null;
+	bayiName: string;
+	quantity: number;
+	revenue: number;
+	costOfGoods: number;
+};
 export type StoredStockLine = Product & {
+	bayiId?: string | null;
+	costPolicy?: 'supplier-average' | null;
+	suppliers?: SupplierSale[] | null;
 	quantityUnit: 'piece' | 'kg';
 	quantity: number;
 	revenue: number;
@@ -46,11 +57,13 @@ export type StockLot = {
 	orderId: string;
 	bayiId: string;
 	bayiName: string;
+	currentBayiName?: string | null;
 	type: ProductType;
 	memoryGb: number | null;
 	quantityUnit: 'piece' | 'kg';
 	quantity: number;
 	remaining: number;
+	remainingValue: number;
 	unitPrice: number;
 	total: number;
 	orderTotal: number;
@@ -70,10 +83,11 @@ export function withStockWrite<T>(write: () => Promise<T>): Promise<T> {
 	return result;
 }
 export async function loadStock() {
-	const [legacySales, restocks, orders] = await Promise.all([
+	const [legacySales, restocks, orders, parties] = await Promise.all([
 		StockSale.find().lean(),
 		StockRestock.find().lean(),
 		Order.find().sort({ createdAt: 1, _id: 1 }).lean(),
+		loadPartyDirectory(),
 	]);
 	const operations: StoredRestock[] = [
 		...legacySales.map((sale) => ({
@@ -103,7 +117,9 @@ export async function loadStock() {
 			// Older purchases can predate the required dealer-name snapshot.
 			lotId: `${order._id}:${index}`,
 			orderId: String(order._id),
-			bayiId: String(order.bayiId ?? ''),
+			bayiId: parties.purchases.get(String(order._id))?.bayiId ?? '',
+			currentBayiName:
+				parties.purchases.get(String(order._id))?.currentBayiName ?? null,
 			bayiName: order.name ?? '',
 			type: line.type as ProductType,
 			memoryGb: ORDER_PRODUCT_TYPES[line.type as ProductType]
@@ -114,7 +130,8 @@ export async function loadStock() {
 				? 'piece'
 				: 'kg') as 'piece' | 'kg',
 			quantity: normalizedQuantity(line.quantity, line.quantityUnit),
-			remaining: normalizedQuantity(line.quantity, line.quantityUnit),
+			remaining: 0,
+			remainingValue: 0,
 			unitPrice: normalizedPrice(line.unitPrice, line.quantityUnit),
 			total: line.total,
 			orderTotal: order.total,
@@ -123,46 +140,67 @@ export async function loadStock() {
 	);
 	const byId = new Map(lots.map((lot) => [lot.lotId, lot]));
 	const pools = new Map<string, { quantity: number; value: number }>();
-	const movements = [
-		...lots.map((lot) => ({
-			key: poolKey(lot),
-			date: lot.createdAt,
-			quantity: lot.quantity,
-			value: lot.total,
-			incoming: true,
-		})),
-		...sales.map((sale) => ({
-			key: poolKey(sale),
-			date: sale.createdAt,
-			quantity: sale.quantity,
-			value: 0,
-			incoming: false,
-		})),
+	const events = [
+		...lots.map((lot) => ({ date: lot.createdAt, lot, sale: null })),
+		...book.sales.map((sale) => ({ date: sale.createdAt, lot: null, sale })),
 	].sort(
 		(a, b) =>
 			a.date.getTime() - b.date.getTime() ||
-			Number(b.incoming) - Number(a.incoming),
+			Number(Boolean(b.lot)) - Number(Boolean(a.lot)),
 	);
-	for (const movement of movements) {
-		const pool = pools.get(movement.key) ?? { quantity: 0, value: 0 };
-		if (movement.incoming) {
-			pool.quantity += movement.quantity;
-			pool.value += movement.value;
-		} else {
-			const cost = pool.quantity > 0 ? pool.value / pool.quantity : 0;
-			pool.quantity = rounded(pool.quantity - movement.quantity);
-			pool.value =
-				pool.quantity > 0 ? rounded(pool.value - cost * movement.quantity) : 0;
+	const revalue = (rows: StockLot[], value: number) => {
+		const remaining = rows.filter((lot) => lot.remaining > 0);
+		const quantity = remaining.reduce((sum, lot) => sum + lot.remaining, 0);
+		let left = rounded(value);
+		remaining.forEach((lot, index) => {
+			lot.remainingValue =
+				index === remaining.length - 1
+					? left
+					: rounded((value * lot.remaining) / quantity);
+			left = rounded(left - lot.remainingValue);
+		});
+		for (const lot of rows) if (lot.remaining <= 0) lot.remainingValue = 0;
+	};
+	for (const event of events) {
+		if (event.lot) {
+			event.lot.remaining = event.lot.quantity;
+			event.lot.remainingValue = event.lot.total;
+			continue;
 		}
-		pools.set(movement.key, pool);
-	}
-	for (const sale of book.sales) {
-		for (const entry of sale.allocations) {
-			const lot = byId.get(entry.lotId);
-			if (lot) lot.remaining = rounded(lot.remaining - entry.quantity);
+		const sale = event.sale!;
+		const rows = lots.filter(
+			(lot) =>
+				stockProductKey(lot) === stockProductKey(sale) && lot.remaining > 0,
+		);
+		const beforeValue = rows.reduce((sum, lot) => sum + lot.remainingValue, 0);
+		const supplierValues = new Map<string, number>();
+		for (const lot of rows)
+			supplierValues.set(
+				lot.bayiId,
+				(supplierValues.get(lot.bayiId) ?? 0) + lot.remainingValue,
+			);
+		for (const allocation of sale.allocations) {
+			const lot = byId.get(allocation.lotId);
+			if (lot) lot.remaining = rounded(lot.remaining - allocation.quantity);
 		}
+		if (sale.costPolicy === 'supplier-average' && sale.suppliers) {
+			for (const supplier of sale.suppliers) {
+				const id = supplier.bayiId ?? '';
+				revalue(
+					rows.filter((lot) => lot.bayiId === id),
+					(supplierValues.get(id) ?? 0) - supplier.costOfGoods,
+				);
+			}
+		} else revalue(rows, beforeValue - sale.costOfGoods);
 	}
-	return { book, lots, pools };
+	for (const lot of lots) {
+		const key = poolKey(lot);
+		const pool = pools.get(key) ?? { quantity: 0, value: 0 };
+		pool.quantity = rounded(pool.quantity + lot.remaining);
+		pool.value = rounded(pool.value + lot.remainingValue);
+		pools.set(key, pool);
+	}
+	return { book, lots, pools, parties };
 }
 
 async function insertStockSale(input: StockSaleInput, userId: string) {
@@ -174,12 +212,13 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 			quantityUnit?: string;
 			quantity: number;
 			revenue: number;
+			bayiId?: string | null;
 		}[],
 	) =>
 		lines
 			.map(
 				(line) =>
-					`${stockProductKey(line)}:${rounded(normalizedQuantity(line.quantity, line.quantityUnit))}:${line.revenue}`,
+					`${stockProductKey(line)}:${line.bayiId ?? '*'}:${rounded(normalizedQuantity(line.quantity, line.quantityUnit))}:${line.revenue}`,
 			)
 			.sort()
 			.join('|');
@@ -196,6 +235,7 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 			);
 		return { operation: existing, isNew: false };
 	}
+	const purchaseLinks = new Map<string, string>();
 	const lines = input.lines.map((inputLine) => {
 		const quantity = rounded(
 			normalizedQuantity(inputLine.quantity, inputLine.quantityUnit),
@@ -203,8 +243,11 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 		const available = state.lots.filter(
 			(lot) =>
 				stockProductKey(lot) === stockProductKey(inputLine) &&
+				(!inputLine.bayiId || lot.bayiId === inputLine.bayiId) &&
 				lot.remaining > 0,
 		);
+		for (const lot of available)
+			if (lot.bayiId) purchaseLinks.set(lot.orderId, lot.bayiId);
 		const totalAvailable = rounded(
 			available.reduce((sum, lot) => sum + lot.remaining, 0),
 		);
@@ -218,8 +261,7 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 			throw new ValidationError(
 				`${label}: tüm stok satışında mevcut stoğun tamamı çıkılmalıdır.`,
 			);
-		// Internal FIFO maintains purchase history. Users enter product totals only;
-		// this bookkeeping never implies supplier-specific sales or profit.
+		// FIFO selects purchase lots within the explicitly selected supplier.
 		let left = quantity;
 		const allocations: { lotId: string; quantity: number }[] = [];
 		for (const lot of available) {
@@ -228,10 +270,48 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 				allocations.push({ lotId: lot.lotId, quantity: rounded(take) });
 			left = rounded(left - take);
 		}
-		const pool = state.pools.get(poolKey(inputLine));
-		if (!pool || pool.quantity <= 0)
-			throw new ValidationError(`${label}: stok bulunamadı.`);
-		const averagePurchaseCost = pool.value / pool.quantity;
+		const supplierQuantities = new Map<string, number>();
+		for (const allocation of allocations) {
+			const lot = available.find((lot) => lot.lotId === allocation.lotId)!;
+			supplierQuantities.set(
+				lot.bayiId,
+				rounded(
+					(supplierQuantities.get(lot.bayiId) ?? 0) + allocation.quantity,
+				),
+			);
+		}
+		const parts = [...supplierQuantities].map(([id, quantity]) => {
+			const rows = available.filter((lot) => lot.bayiId === id);
+			const stock = rows.reduce((sum, lot) => sum + lot.remaining, 0);
+			const value = rows.reduce((sum, lot) => sum + lot.remainingValue, 0);
+			return {
+				bayiId: id || null,
+				bayiName: state.parties.bayi.currentName(id) ?? rows[0].bayiName,
+				quantity,
+				revenue: 0,
+				costOfGoods: rounded((value / stock) * quantity),
+			};
+		});
+		// Allocate integer cents without losing or inventing money on rounding.
+		const cents = Math.round(inputLine.revenue * 100);
+		const shares = parts.map((part, index) => ({
+			index,
+			exact: (cents * part.quantity) / quantity,
+		}));
+		let remaining = cents;
+		for (const share of shares) {
+			const floor = Math.floor(share.exact);
+			parts[share.index].revenue = floor;
+			remaining -= floor;
+		}
+		shares.sort((a, b) => (b.exact % 1) - (a.exact % 1) || a.index - b.index);
+		for (let index = 0; index < remaining; index++)
+			parts[shares[index % shares.length].index].revenue++;
+		for (const part of parts) part.revenue /= 100;
+		const costOfGoods = rounded(
+			parts.reduce((sum, part) => sum + part.costOfGoods, 0),
+		);
+		const averagePurchaseCost = costOfGoods / quantity;
 		return {
 			...inputLine,
 			quantityUnit: (inputLine.quantityUnit === 'piece' ? 'piece' : 'kg') as
@@ -241,10 +321,23 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 			allocations,
 			previousQuantity: totalAvailable,
 			remainingQuantity: rounded(totalAvailable - quantity),
-			costOfGoods: rounded(averagePurchaseCost * quantity),
+			costPolicy: 'supplier-average' as const,
+			suppliers: parts,
+			costOfGoods,
 			averagePurchaseCost: rounded(averagePurchaseCost),
 		};
 	});
+	// Freeze unambiguous purchase references used by this sale before aliases can be reused.
+	if (purchaseLinks.size)
+		await Order.bulkWrite(
+			[...purchaseLinks].map(([id, bayiId]) => ({
+				updateOne: {
+					filter: { _id: new Types.ObjectId(id), bayiId: null },
+					update: { $set: { bayiId: new Types.ObjectId(bayiId) } },
+					timestamps: false,
+				},
+			})),
+		);
 	// Validate every row before this single insert: a bad row cannot partially save.
 	const operation = await StockRestock.create({
 		_id: input.requestId,

@@ -45,3 +45,45 @@ export function summarizeStockSales(sales: Sale[], byMemory = false) {
 				: null,
 	}));
 }
+
+export function summarizeSupplierSales(sales: Sale[]) {
+	const groups = new Map<
+		string,
+		{
+			bayiId: string | null;
+			bayiName: string;
+			type: string;
+			memoryGb: number | null;
+			quantityUnit: string;
+			quantity: number;
+			revenue: number;
+			costOfGoods: number;
+		}
+	>();
+	for (const sale of sales)
+		for (const part of sale.suppliers ?? []) {
+			const key = (part.bayiId ?? 'unlinked') + ':' + stockProductKey(sale);
+			const group = groups.get(key) ?? {
+				bayiId: part.bayiId ?? null,
+				bayiName: part.bayiName,
+				type: sale.type,
+				memoryGb: sale.memoryGb ?? null,
+				quantityUnit: sale.quantityUnit,
+				quantity: 0,
+				revenue: 0,
+				costOfGoods: 0,
+			};
+			group.quantity += part.quantity;
+			group.revenue += part.revenue;
+			group.costOfGoods += part.costOfGoods;
+			groups.set(key, group);
+		}
+	return [...groups.values()].map((group) => ({
+		...group,
+		profit: group.revenue - group.costOfGoods,
+		margin:
+			group.revenue > 0
+				? ((group.revenue - group.costOfGoods) / group.revenue) * 100
+				: null,
+	}));
+}

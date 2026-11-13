@@ -7,9 +7,22 @@ const allocation = new mongoose.Schema(
 	},
 	{ _id: false },
 );
+const supplier = new mongoose.Schema(
+	{
+		bayiId: { type: String, default: null },
+		bayiName: { type: String, default: '' },
+		quantity: { type: Number, required: true },
+		revenue: { type: Number, required: true },
+		costOfGoods: { type: Number, required: true },
+	},
+	{ _id: false },
+);
 const line = new mongoose.Schema(
 	{
 		type: { type: String, required: true },
+		bayiId: { type: String, default: null },
+		costPolicy: { type: String, enum: ['supplier-average'] },
+		suppliers: { type: [supplier], default: undefined },
 		memoryGb: { type: Number, default: null },
 		quantityUnit: { type: String, enum: ['piece', 'kg'], required: true },
 		quantity: { type: Number, required: true },
