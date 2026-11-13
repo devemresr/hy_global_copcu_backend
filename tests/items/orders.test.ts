@@ -39,6 +39,45 @@ const lines = [
 	{ type: 'EMCP', memoryGb: 8, quantity: 5 },
 ];
 describe('orders', () => {
+	it('uses weight catalog prices without treating them as piece prices', async () => {
+		const auth = 'Bearer ' + (await loginAndGetTokens()).accessToken;
+		await Item.updateOne(
+			{ bellekTipi: 'EMCP', depolama: 8 },
+			{ $set: { fiyatBirimi: 'g', fiyat: 2 } },
+		);
+		const pricing = await request(app)
+			.get(ORDER_ROUTES.PRICING)
+			.set('Authorization', auth)
+			.expect(200);
+		expect(pricing.body.prices.EMCP[8]).toBeUndefined();
+		expect(pricing.body.unitPrices.EMCP[8]).toEqual({ kg: 2000, g: 2 });
+		expect(pricing.body.quantityUnits.EMCP[8]).toEqual(['g']);
+		for (const line of [
+			{ quantity: 250, quantityUnit: 'g' },
+			{ quantity: 0.25, quantityUnit: 'kg' },
+		]) {
+			const result = await request(app)
+				.post(ORDER_ROUTES.CREATE)
+				.set('Authorization', auth)
+				.send({
+					bayiId: BAYI_ID,
+					lines: [{ type: 'EMCP', memoryGb: 8, ...line }],
+				})
+				.expect(201);
+			expect(result.body.order.total).toBe(500);
+			expect(result.body.order.lines[0].originalUnitPrice).toBe(
+				line.quantityUnit === 'g' ? 2 : 2000,
+			);
+		}
+		await request(app)
+			.post(ORDER_ROUTES.CREATE)
+			.set('Authorization', auth)
+			.send({
+				bayiId: BAYI_ID,
+				lines: [{ type: 'EMCP', memoryGb: 8, quantity: 1 }],
+			})
+			.expect(400);
+	});
 	it('applies numeric criteria to the same product before pagination and report aggregation', async () => {
 		const auth = 'Bearer ' + (await loginAndGetTokens()).accessToken;
 		await request(app)

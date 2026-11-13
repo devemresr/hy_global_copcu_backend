@@ -8,7 +8,8 @@ function matches(
 	item: UpdateItemInput,
 	{ field, op, value }: ItemRuleData['conditions'][number],
 ): boolean {
-	const raw = item[field];
+	const raw =
+		field === 'fiyatBirimi' ? (item.fiyatBirimi ?? 'piece') : item[field];
 	const present = raw != null && String(raw).trim() !== '';
 	const text = String(raw ?? '').toLowerCase();
 	const target = value.toLowerCase();
@@ -90,7 +91,9 @@ export function resolveItemRuleDetails(
 			sources[action.field] = { id: rule.id, name: rule.name };
 			const numeric = action.field === 'depolama' || action.field === 'fiyat';
 			const enumeration =
-				action.field === 'depolamaBirimi' || action.field === 'paraBirimi';
+				action.field === 'depolamaBirimi' ||
+				action.field === 'paraBirimi' ||
+				action.field === 'fiyatBirimi';
 			const value = numeric
 				? action.value.trim() === ''
 					? null

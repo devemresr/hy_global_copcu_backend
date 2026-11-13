@@ -8,6 +8,7 @@ const fields = [
 	'depolamaBirimi',
 	'fiyat',
 	'paraBirimi',
+	'fiyatBirimi',
 ] as const;
 const numberOps = [
 	'equals',
@@ -68,7 +69,9 @@ const conditionSchema = z
 				? [...textOps, ...lengthOps]
 				: ['depolama', 'fiyat'].includes(condition.field)
 					? numberOps
-					: ['depolamaBirimi', 'paraBirimi'].includes(condition.field)
+					: ['depolamaBirimi', 'paraBirimi', 'fiyatBirimi'].includes(
+								condition.field,
+						  )
 						? enumOps
 						: textOps;
 		if (!allowed.includes(condition.op))
@@ -93,7 +96,11 @@ const actionSchema = z
 	.strict()
 	.superRefine((action, context) => {
 		const numeric = ['depolama', 'fiyat'].includes(action.field);
-		const enumeration = ['depolamaBirimi', 'paraBirimi'].includes(action.field);
+		const enumeration = [
+			'depolamaBirimi',
+			'paraBirimi',
+			'fiyatBirimi',
+		].includes(action.field);
 		const value = numeric
 			? action.value.trim() === ''
 				? null

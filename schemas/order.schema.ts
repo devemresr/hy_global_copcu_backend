@@ -44,15 +44,6 @@ export const orderLineSchema = z
 	.superRefine((line, context) => {
 		if (
 			ORDER_PRODUCT_TYPES[line.type].requiresMemorySize &&
-			line.quantityUnit !== 'piece'
-		)
-			context.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ['quantityUnit'],
-				message: 'Bellek ürünleri adet ile takip edilir.',
-			});
-		if (
-			ORDER_PRODUCT_TYPES[line.type].requiresMemorySize &&
 			line.memoryGb == null
 		)
 			context.addIssue({
@@ -100,6 +91,23 @@ const date = z
 export const orderQuerySchema = z
 	.object({
 		bayiName: z.string().trim().max(120).optional(),
+		purchaseId: z
+			.string()
+			.regex(/^[a-f\d]{24}$/i)
+			.optional(),
+		bayiIds: z
+			.preprocess(
+				(value) => (typeof value === 'string' ? value.split(',') : value),
+				z
+					.array(z.string().regex(/^[a-f\d]{24}$/i))
+					.min(1)
+					.max(200),
+			)
+			.optional(),
+		bayiId: z
+			.string()
+			.regex(/^[a-f\d]{24}$/i)
+			.optional(),
 		numericFilters: numericFiltersQuerySchema,
 		excludeIds: z
 			.string()

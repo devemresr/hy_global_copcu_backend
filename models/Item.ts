@@ -1,7 +1,11 @@
 import mongoose, { Types } from 'mongoose';
 import type { DocumentWithTimestamps } from './User';
-import { CURRENCY_VALUES, STORAGE_UNIT_VALUES } from '../schemas/item.schema';
-import type { Currency, StorageUnit } from '../schemas/item.schema';
+import {
+	CURRENCY_VALUES,
+	STORAGE_UNIT_VALUES,
+	PRICE_UNIT_VALUES,
+} from '../schemas/item.schema';
+import type { Currency, StorageUnit, PriceUnit } from '../schemas/item.schema';
 import { isPowerOfTwo, STORAGE_POWER_WARNING } from '../util/storageSize';
 
 const { Schema } = mongoose;
@@ -31,6 +35,12 @@ const itemSchema = new Schema<TimeStampedItem>(
 			default: 'GB',
 		},
 		fiyat: { type: Number, required: false, default: null },
+		fiyatBirimi: {
+			type: String,
+			enum: PRICE_UNIT_VALUES,
+			required: true,
+			default: 'piece',
+		},
 		paraBirimi: {
 			type: String,
 			enum: CURRENCY_VALUES,
@@ -59,6 +69,7 @@ export type ItemData = {
 	depolamaBirimi: StorageUnit;
 	fiyat: number | null;
 	paraBirimi: Currency;
+	fiyatBirimi?: PriceUnit;
 };
 
 export type TimeStampedItem = DocumentWithTimestamps<ItemData> & {

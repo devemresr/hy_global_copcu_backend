@@ -51,6 +51,9 @@ export async function listCustomerPriceRules(
 								item.depolama,
 								item.depolamaBirimi,
 								item.paraBirimi,
+								...(item.fiyatBirimi && item.fiyatBirimi !== 'piece'
+									? [item.fiyatBirimi]
+									: []),
 							]),
 							ruleId: source.id,
 							ruleName: source.name,

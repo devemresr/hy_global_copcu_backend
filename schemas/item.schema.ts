@@ -5,6 +5,10 @@ export const CURRENCY_VALUES = ['TRY', 'USD'] as const;
 export const currencySchema = z.enum(CURRENCY_VALUES);
 export type Currency = z.infer<typeof currencySchema>;
 
+export const PRICE_UNIT_VALUES = ['piece', 'kg', 'g'] as const;
+export const priceUnitSchema = z.enum(PRICE_UNIT_VALUES);
+export type PriceUnit = z.infer<typeof priceUnitSchema>;
+
 export const STORAGE_UNIT_VALUES = ['GB', 'TB'] as const;
 export const storageUnitSchema = z.enum(STORAGE_UNIT_VALUES);
 export type StorageUnit = z.infer<typeof storageUnitSchema>;
@@ -31,6 +35,7 @@ export const editableItemFieldsSchema = z.object({
 		.nonnegative('fiyat must be a non-negative number')
 		.nullable(),
 	paraBirimi: currencySchema,
+	fiyatBirimi: priceUnitSchema.optional(),
 });
 
 // Create only requires model - the rest fall back to the schema's own

@@ -1,3 +1,4 @@
+import { loadPartyDirectory } from '../services/partyIdentity.service';
 import {
 	orderNumericExpression,
 	numericFieldsFor,
@@ -6,7 +7,7 @@ import type { Request, Response } from 'express';
 import { Types, type QueryFilter } from 'mongoose';
 import { requireUserId } from './auth.helper';
 import { createOrderSchema, orderQuerySchema } from '../schemas/order.schema';
-import { loadOrderPurchasePrices } from '../services/purchasePrices.service';
+import { loadOrderPurchasePricing } from '../services/purchasePrices.service';
 import {
 	ORDER_MEMORY_SIZES,
 	ORDER_PRODUCT_TYPES,
@@ -30,7 +31,7 @@ export const getOrderPricing = async (
 ): Promise<void> => {
 	try {
 		res.json({
-			prices: await loadOrderPurchasePrices(),
+			...(await loadOrderPurchasePricing()),
 			productTypes: ORDER_PRODUCT_TYPES,
 			memorySizes: ORDER_MEMORY_SIZES,
 		});
@@ -53,14 +54,14 @@ export const createOrder = async (
 			throw new ValidationError(
 				'Seçilen bayi bulunamadı. Bayi listesini yenileyip tekrar seçin.',
 			);
-		const prices = await loadOrderPurchasePrices();
+		const prices = await loadOrderPurchasePricing();
 		const lines = input.lines.map((line) => {
 			const requiresMemorySize =
 				ORDER_PRODUCT_TYPES[line.type].requiresMemorySize;
 			const memoryGb = requiresMemorySize ? line.memoryGb! : null;
 			const catalogPrice =
-				line.quantityUnit === 'piece' && memoryGb !== null
-					? prices[line.type]?.[memoryGb]
+				memoryGb !== null
+					? prices.unitPrices[line.type]?.[memoryGb]?.[line.quantityUnit]
 					: undefined;
 			const originalUnitPrice = catalogPrice ?? line.manualListPrice ?? null;
 			const unitPrice =
@@ -120,6 +121,8 @@ export const createOrder = async (
 			action: LOG_ACTIONS.STOCK_PURCHASE_CREATE,
 			entityType: LOG_ENTITY_TYPES.STOCK_PURCHASE,
 			entityId: String(order._id),
+			bayiId: String(bayi._id),
+			bayiName: bayi.name,
 			entityKey: `${bayi.name} · ${lines.map((line) => `${ORDER_PRODUCT_TYPES[line.type].label}${line.memoryGb === null ? '' : ` ${line.memoryGb} GB`}`).join(', ')}`,
 			fields: [
 				{ field: 'bayiName', previousValue: null, newValue: bayi.name },
@@ -168,14 +171,30 @@ export const listOrders = async (
 				parsed.error.issues.map((i) => i.message).join(' '),
 			);
 		const q = parsed.data;
+		const parties = await loadPartyDirectory();
 		const filter: QueryFilter<typeof Order.schema> = {};
-		if (q.bayiName)
+		const bayiIds = q.bayiIds?.length ? q.bayiIds : q.bayiId ? [q.bayiId] : [];
+		if (bayiIds.length) {
+			const ids = new Set(bayiIds);
+			const legacy = [...parties.purchases]
+				.filter(([, party]) => party.bayiId && ids.has(party.bayiId))
+				.map(([id]) => new Types.ObjectId(id));
+			filter.$or = [
+				{ bayiId: { $in: bayiIds.map((id) => new Types.ObjectId(id)) } },
+				{ _id: { $in: legacy } },
+			];
+		}
+		if (!bayiIds.length && q.bayiName)
 			filter.name = {
 				$regex: q.bayiName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
 				$options: 'i',
 			};
+		if (q.purchaseId) filter._id = new Types.ObjectId(q.purchaseId);
 		if (q.excludeIds?.length)
-			filter._id = { $nin: q.excludeIds.map((id) => new Types.ObjectId(id)) };
+			filter._id = {
+				...(q.purchaseId ? { $eq: new Types.ObjectId(q.purchaseId) } : {}),
+				$nin: q.excludeIds.map((id) => new Types.ObjectId(id)),
+			};
 		if (q.from || q.until) {
 			filter.createdAt = {
 				...(q.from ? { $gte: new Date(`${q.from}T00:00:00+03:00`) } : {}),
@@ -438,8 +457,17 @@ export const listOrders = async (
 		]);
 		const summary = result.summary[0] ?? { count: 0, total: 0, quantity: 0 };
 		res.json({
-			orders: result.orders,
-			timeline: result.timeline,
+			bayiFilterName: bayiIds.length
+				? bayiIds.map((id) => parties.bayi.currentName(id) ?? id).join(', ')
+				: (q.bayiName ?? null),
+			orders: result.orders.map((row: { _id: unknown }) => ({
+				...row,
+				...parties.purchases.get(String(row._id)),
+			})),
+			timeline: result.timeline.map((row: { _id: unknown }) => ({
+				...row,
+				...parties.purchases.get(String(row._id)),
+			})),
 			summary,
 			daily: result.daily,
 			byType: result.byType,
