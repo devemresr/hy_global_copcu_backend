@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { scheduledReportReceipt } from '../services/email/scheduledReportReceipt.service';
 import { sendReceiptEmail } from '../services/email/transactionEmail.service';
 import { operationEmail } from '../services/email/operationReceipt.service';
+import { reportScheduleCreator } from '../services/email/reportScheduleIdentity.service';
 import { umamiConfigured } from '../services/email/umamiReport.service';
 
 const log = logger.child({ module: 'reportSchedules' });
@@ -77,7 +78,7 @@ export async function saveReportSchedule(req: Request, res: Response) {
 					pendingRunAt: null,
 					lastError: null,
 				},
-				$setOnInsert: { createdBy: adminId },
+				$setOnInsert: { createdBy: adminId, createdByName: admin.username },
 			},
 			{ upsert: !req.params.id, returnDocument: 'after', runValidators: true },
 		);
@@ -133,6 +134,13 @@ async function developmentReport(req: Request) {
 		{ ...input, adminId, adminName: admin.username },
 		`dev-${id}-${randomUUID()}`,
 	);
+	const creator = await reportScheduleCreator(schedule);
+	receipt.delivery = {
+		mode: 'manual',
+		jobId: id,
+		jobName: schedule.name,
+		createdBy: creator,
+	};
 	return { id, adminId, input, receipt };
 }
 export async function previewReportSchedule(req: Request, res: Response) {

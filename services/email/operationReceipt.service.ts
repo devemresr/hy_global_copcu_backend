@@ -31,6 +31,12 @@ export type OperationReceipt = {
 	totalFormat?: 'money' | 'number';
 	reportSource?: 'umami';
 	reportPeriod?: string;
+	delivery?: {
+		mode: 'scheduled' | 'manual' | 'operation';
+		jobId?: string;
+		jobName?: string;
+		createdBy?: { id: string; name: string };
+	};
 	extraAttachments?: {
 		filename: string;
 		contentBase64: string;
@@ -65,6 +71,7 @@ function metadata(actor: Actor, time: Date) {
 		adminId: actor.adminId,
 		adminName: actor.adminUsername,
 		occurredAt: time.toISOString(),
+		delivery: { mode: 'operation' as const },
 	};
 }
 export function purchaseReceipt(
@@ -338,12 +345,40 @@ const escape = (value: string) =>
 			]!,
 	);
 export function receiptMetadata(receipt: OperationReceipt) {
+	const mode = receipt.delivery?.mode;
+	const actor = receipt.adminName + ' (' + receipt.adminId + ')';
 	return [
-		'İşlemi yapan yönetici: ' +
-			receipt.adminName +
-			' (' +
-			receipt.adminId +
-			')',
+		...(mode
+			? [
+					'Gönderim: ' +
+						{
+							scheduled: 'Otomatik · Zamanlanmış görev',
+							manual: 'Manuel · Yönetici tarafından başlatıldı',
+							operation: 'Otomatik · İşlem kaydı sonrası',
+						}[mode],
+				]
+			: []),
+		...(receipt.delivery?.jobName
+			? ['Rapor görevi: ' + receipt.delivery.jobName]
+			: []),
+		...(mode === 'scheduled'
+			? []
+			: [
+					(mode === 'manual'
+						? 'Gönderimi başlatan yönetici: '
+						: 'İşlemi yapan yönetici: ') + actor,
+				]),
+		...(receipt.delivery?.createdBy
+			? [
+					'Görevi oluşturan yönetici: ' +
+						receipt.delivery.createdBy.name +
+						' (' +
+						receipt.delivery.createdBy.id +
+						')',
+				]
+			: mode === 'scheduled'
+				? ['Görevi oluşturan yönetici: ' + actor]
+				: []),
 		(receipt.kind === 'report'
 			? 'Rapor oluşturulma zamanı: '
 			: 'İşlem zamanı: ') +
@@ -543,7 +578,13 @@ export function operationEmail(
 		'</p><p style="font-size:12px;color:#475569">' +
 		pdfNotice +
 		'</p></div></body></html>';
-	return { subject: 'HY Global Çöpçü · ' + receipt.title, text, html };
+	const prefix =
+		receipt.delivery?.mode === 'manual'
+			? '[Manuel] '
+			: receipt.delivery
+				? '[Otomatik] '
+				: '';
+	return { subject: 'HY Global Çöpçü · ' + prefix + receipt.title, text, html };
 }
 export function operationDocument(
 	receipt: OperationReceipt,

@@ -19,6 +19,7 @@ const schema = new mongoose.Schema(
 		relativePeriod: { type: String, required: true },
 		recipients: { type: [String], default: [] },
 		createdBy: { type: mongoose.Schema.Types.ObjectId, required: true },
+		createdByName: { type: String, default: null },
 		updatedBy: { type: mongoose.Schema.Types.ObjectId },
 		adminName: { type: String, required: true },
 		nextRunAt: { type: Date, required: true },

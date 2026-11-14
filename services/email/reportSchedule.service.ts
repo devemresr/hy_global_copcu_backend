@@ -4,6 +4,7 @@ import { nextReportRun } from '../../util/reportScheduleTime';
 import logger from '../../util/logger';
 import { scheduledReportReceipt } from './scheduledReportReceipt.service';
 import { queueTransactionEmail } from './transactionEmail.service';
+import { reportScheduleCreator } from './reportScheduleIdentity.service';
 
 let timer: ReturnType<typeof setInterval> | undefined;
 let running: Promise<void> | undefined;
@@ -47,15 +48,22 @@ async function prepareDueReports() {
 				relativePeriod: job.relativePeriod,
 				recipients: job.recipients,
 			});
+			const creator = await reportScheduleCreator(job);
 			const receipt = await scheduledReportReceipt(
 				{
 					...input,
-					adminId: String(job.updatedBy ?? job.createdBy),
-					adminName: job.adminName,
+					adminId: creator.id,
+					adminName: creator.name,
 				},
 				`${job._id}-${(job.pendingRunAt ?? job.nextRunAt).toISOString()}`,
 				now,
 			);
+			receipt.delivery = {
+				mode: 'scheduled',
+				jobId: String(job._id),
+				jobName: job.name,
+				createdBy: creator,
+			};
 			if (
 				!(await ReportSchedule.exists({
 					_id: job._id,

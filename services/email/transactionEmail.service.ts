@@ -10,6 +10,7 @@ import { ValidationError } from '../../errors/HttpError';
 import {
 	operationDocument,
 	operationEmail,
+	receiptMetadata,
 	type OperationReceipt,
 } from './operationReceipt.service';
 import { sendEmail } from './emailSender.service';
@@ -89,11 +90,11 @@ export async function sendReceiptEmail(
 			: [document.content];
 		document.content = [
 			{ text: receipt.title, fontSize: 13, bold: true, margin: [0, 0, 0, 6] },
-			{
-				text: `Hazırlayan: ${receipt.adminName} · ${new Date(receipt.occurredAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })} (İstanbul)`,
+			...receiptMetadata(receipt).map((text) => ({
+				text,
 				fontSize: 9,
-				margin: [0, 0, 0, 10],
-			},
+				margin: [0, 0, 0, 5],
+			})),
 			...content,
 		] as Content[];
 	} else document = operationDocument(receipt);
