@@ -23,6 +23,7 @@ export const LOG_ACTIONS = {
 	STOCK_RESTOCK_PARTIAL: 'stock:restock_partial',
 	STOCK_PRICE_UPDATE: 'stock:price_update',
 	STOCK_PURCHASE_CREATE: 'stock:purchase_create',
+	STOCK_CONVERSION_CREATE: 'stock:conversion_create',
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
@@ -42,6 +43,7 @@ export const LOG_ENTITY_TYPES = {
 	STOCK_RESTOCK: 'stock_restock',
 	STOCK_PRICE: 'stock_price',
 	STOCK_PURCHASE: 'stock_purchase',
+	STOCK_CONVERSION: 'stock_conversion',
 } as const;
 
 export type LogEntityType =

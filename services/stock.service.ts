@@ -1,3 +1,5 @@
+import { stockConversionLines } from './stockConversionLines';
+import { StockConversion } from '../models/StockConversion';
 import { loadPartyDirectory } from './partyIdentity.service';
 import { Order } from '../models/Order';
 import { StockSale } from '../models/StockSale';
@@ -53,6 +55,7 @@ const normalizedPrice = (price: number, unit?: string) =>
 	unit === 'g' ? price * 1000 : price;
 const rounded = (n: number, digits = 6) => Number(n.toFixed(digits));
 export type StockLot = {
+	conversionId?: string;
 	lotId: string;
 	orderId: string;
 	bayiId: string;
@@ -83,12 +86,14 @@ export function withStockWrite<T>(write: () => Promise<T>): Promise<T> {
 	return result;
 }
 export async function loadStock() {
-	const [legacySales, restocks, orders, parties] = await Promise.all([
-		StockSale.find().lean(),
-		StockRestock.find().lean(),
-		Order.find().sort({ createdAt: 1, _id: 1 }).lean(),
-		loadPartyDirectory(),
-	]);
+	const [legacySales, restocks, orders, parties, conversions] =
+		await Promise.all([
+			StockSale.find().lean(),
+			StockRestock.find().lean(),
+			Order.find().sort({ createdAt: 1, _id: 1 }).lean(),
+			loadPartyDirectory(),
+			StockConversion.find().sort({ createdAt: 1, _id: 1 }).lean(),
+		]);
 	const operations: StoredRestock[] = [
 		...legacySales.map((sale) => ({
 			requestId: sale.requestId,
@@ -112,7 +117,7 @@ export async function loadStock() {
 		})),
 	);
 	const book = { sales, operations };
-	const lots: StockLot[] = orders.flatMap((order) =>
+	const purchaseLots: StockLot[] = orders.flatMap((order) =>
 		order.lines.map((line, index) => ({
 			// Older purchases can predate the required dealer-name snapshot.
 			lotId: `${order._id}:${index}`,
@@ -138,15 +143,30 @@ export async function loadStock() {
 			createdAt: order.createdAt,
 		})),
 	);
+	const lots = [...purchaseLots];
 	const byId = new Map(lots.map((lot) => [lot.lotId, lot]));
 	const pools = new Map<string, { quantity: number; value: number }>();
 	const events = [
-		...lots.map((lot) => ({ date: lot.createdAt, lot, sale: null })),
-		...book.sales.map((sale) => ({ date: sale.createdAt, lot: null, sale })),
+		...purchaseLots.map((lot) => ({
+			date: lot.createdAt,
+			kind: 'purchase' as const,
+			lot,
+		})),
+		...conversions.map((conversion) => ({
+			date: conversion.createdAt,
+			kind: 'conversion' as const,
+			conversion,
+		})),
+		...book.sales.map((sale) => ({
+			date: sale.createdAt,
+			kind: 'sale' as const,
+			sale,
+		})),
 	].sort(
 		(a, b) =>
 			a.date.getTime() - b.date.getTime() ||
-			Number(Boolean(b.lot)) - Number(Boolean(a.lot)),
+			['purchase', 'conversion', 'sale'].indexOf(a.kind) -
+				['purchase', 'conversion', 'sale'].indexOf(b.kind),
 	);
 	const revalue = (rows: StockLot[], value: number) => {
 		const remaining = rows.filter((lot) => lot.remaining > 0);
@@ -162,12 +182,47 @@ export async function loadStock() {
 		for (const lot of rows) if (lot.remaining <= 0) lot.remainingValue = 0;
 	};
 	for (const event of events) {
-		if (event.lot) {
+		if (event.kind === 'purchase') {
 			event.lot.remaining = event.lot.quantity;
 			event.lot.remainingValue = event.lot.total;
 			continue;
 		}
-		const sale = event.sale!;
+		if (event.kind === 'conversion') {
+			const operation = event.conversion;
+			const lines = stockConversionLines(operation);
+			for (const [index, conversion] of lines.entries()) {
+				const source = byId.get(conversion.sourceLotId);
+				if (!source)
+					throw new Error(
+						'Stock conversion source is missing: ' + conversion.sourceLotId,
+					);
+				source.remaining = rounded(
+					source.remaining - conversion.sourceQuantity,
+				);
+				source.remainingValue = rounded(
+					source.remainingValue - conversion.cost,
+				);
+				const converted: StockLot = {
+					...source,
+					lotId:
+						'conversion:' +
+						operation._id +
+						(operation.lines?.length ? ':' + index : ''),
+					conversionId: String(operation._id),
+					quantityUnit: conversion.toUnit === 'piece' ? 'piece' : 'kg',
+					quantity: conversion.targetQuantity,
+					remaining: conversion.targetQuantity,
+					remainingValue: conversion.cost,
+					total: conversion.cost,
+					unitPrice: conversion.cost / conversion.targetQuantity,
+					createdAt: operation.createdAt,
+				};
+				lots.push(converted);
+				byId.set(converted.lotId, converted);
+			}
+			continue;
+		}
+		const sale = event.sale;
 		const rows = lots.filter(
 			(lot) =>
 				stockProductKey(lot) === stockProductKey(sale) && lot.remaining > 0,
@@ -200,7 +255,18 @@ export async function loadStock() {
 		pool.value = rounded(pool.value + lot.remainingValue);
 		pools.set(key, pool);
 	}
-	return { book, lots, purchaseLots: lots, pools, parties };
+	return { book, lots, purchaseLots, pools, parties, conversions };
+}
+
+export function nextStockEventTime(
+	state: Awaited<ReturnType<typeof loadStock>>,
+) {
+	let latest = 0;
+	for (const lot of state.lots)
+		latest = Math.max(latest, lot.createdAt.getTime());
+	for (const sale of state.book.operations)
+		latest = Math.max(latest, sale.createdAt.getTime());
+	return new Date(Math.max(Date.now(), latest + 1));
 }
 
 async function insertStockSale(input: StockSaleInput, userId: string) {
@@ -348,7 +414,7 @@ async function insertStockSale(input: StockSaleInput, userId: string) {
 		totalCostOfGoods: rounded(
 			lines.reduce((sum, line) => sum + line.costOfGoods, 0),
 		),
-		createdAt: new Date(),
+		createdAt: nextStockEventTime(state),
 		createdBy: userId,
 	});
 	return { operation: operation.toObject(), isNew: true };

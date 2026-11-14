@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { requireAuth } from '../controllers/auth.helper';
 import {
+	getStockConversions,
+	postStockConversion,
+} from '../controllers/stockConversion.controller';
+import { stockConversionSchema } from '../schemas/stockConversion.schema';
+import {
 	getStock,
 	postSale,
 	postPurchaseWarnings,
@@ -14,6 +19,13 @@ import {
 
 export default function stockRoutes() {
 	const router = Router();
+	router.get('/stock/conversions', ...requireAuth(), getStockConversions);
+	router.post(
+		'/stock/conversions',
+		...requireAuth(),
+		validateBody(stockConversionSchema),
+		postStockConversion,
+	);
 	router.get(STOCK_ROUTES.LIST, ...requireAuth(), getStock);
 	router.post(
 		STOCK_ROUTES.SALES,

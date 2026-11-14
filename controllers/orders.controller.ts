@@ -21,6 +21,8 @@ import { handleHttpError } from '../errors/handleHttpError';
 import logger from '../util/logger';
 import {
 	checkPurchaseWarnings,
+	loadStock,
+	nextStockEventTime,
 	withStockWrite,
 } from '../services/stock.service';
 import { User } from '../models/User';
@@ -114,6 +116,7 @@ export const createOrder = async (
 				lines,
 				input.comparisonDays,
 			);
+			order.createdAt = nextStockEventTime(await loadStock());
 			await order.save();
 			return claims;
 		});

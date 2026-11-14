@@ -1,3 +1,4 @@
+import { stockConversionLines } from '../stockConversionLines';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { ORDER_PRODUCT_TYPES } from '../../constants/orderProducts.constant';
 import {
@@ -241,6 +242,51 @@ export function financeReceipt(
 		totalLabel:
 			action === 'create' ? direction + ' tutarı' : 'İptal edilen tutar',
 		total: entry.amountCents / 100,
+	};
+}
+export function conversionReceipt(
+	conversion: Awaited<
+		ReturnType<
+			typeof import('../stockConversion.service').recordStockConversion
+		>
+	>['conversion'],
+	actor: Actor,
+): OperationReceipt {
+	const lines = stockConversionLines(conversion);
+	return {
+		kind: 'conversion',
+		recordId: String(conversion._id),
+		title: 'Stok birimi dönüşümü',
+		...metadata(actor, conversion.createdAt),
+		partyLabel: 'Bayiler',
+		partyName: [...new Set(lines.map((line) => line.bayiName))].join(', '),
+		tables: [
+			{
+				title: 'Dönüştürülen stoklar',
+				headers: [
+					'Ürün',
+					'Bayi',
+					'Kaynak alış',
+					'Düşülen miktar',
+					'Yeni miktar',
+					'Korunan maliyet',
+				],
+				rows: lines.map((line) => [
+					formatPurchaseProduct(line),
+					line.bayiName,
+					line.orderId,
+					formatPurchaseQuantity(line.fromQuantity, line.fromUnit),
+					formatPurchaseQuantity(line.toQuantity, line.toUnit),
+					formatPurchaseMoney(line.cost),
+				]),
+			},
+		],
+		notes: [
+			'Bayi sahipliği ve maliyet korunmuştur. Bu dönüşüm gelir veya gider oluşturmaz.',
+			...(conversion.note ? [conversion.note] : []),
+		],
+		totalLabel: 'Korunan toplam stok maliyeti',
+		total: lines.reduce((sum, line) => sum + line.cost, 0),
 	};
 }
 export const formatPurchaseMoney = (value: number) =>
