@@ -1,4 +1,33 @@
 import type { ReportScheduleInput } from '../schemas/reportSchedule.schema';
+export function reportPeriodLabel(
+	period: ReportScheduleInput['relativePeriod'],
+	now = new Date(),
+) {
+	const names: Record<ReportScheduleInput['relativePeriod'], string> = {
+		today: 'Bugün',
+		yesterday: 'Dün',
+		thisWeek: 'Bu hafta',
+		lastWeek: 'Geçen hafta',
+		thisMonth: 'Bu ay',
+		lastMonth: 'Geçen ay',
+		thisYear: 'Bu yıl',
+		lastYear: 'Geçen yıl',
+		last7Days: 'Son 7 gün',
+		last30Days: 'Son 30 gün',
+		allTime: 'Tüm zamanlar',
+	};
+	const range = reportPeriodRange(period, now);
+	return (
+		names[period] +
+		(range.from && range.until
+			? ' · ' +
+				range.from.split('-').reverse().join('.') +
+				' – ' +
+				range.until.split('-').reverse().join('.')
+			: '') +
+		' (İstanbul)'
+	);
+}
 
 const parts = (time: Date) => {
 	const values = new Intl.DateTimeFormat('en-CA', {

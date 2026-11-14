@@ -29,6 +29,8 @@ export type OperationReceipt = {
 	totalLabel: string;
 	total: number;
 	totalFormat?: 'money' | 'number';
+	reportSource?: 'umami';
+	reportPeriod?: string;
 	extraAttachments?: {
 		filename: string;
 		contentBase64: string;
@@ -335,7 +337,7 @@ const escape = (value: string) =>
 				char
 			]!,
 	);
-function details(receipt: OperationReceipt) {
+export function receiptMetadata(receipt: OperationReceipt) {
 	return [
 		'İşlemi yapan yönetici: ' +
 			receipt.adminName +
@@ -350,14 +352,33 @@ function details(receipt: OperationReceipt) {
 			}) +
 			' (İstanbul)',
 		receipt.partyLabel + ': ' + receipt.partyName,
+		...(receipt.reportPeriod ? ['Rapor dönemi: ' + receipt.reportPeriod] : []),
 		'Kayıt kimliği: ' + receipt.recordId,
+	];
+}
+function receiptNotes(receipt: OperationReceipt) {
+	return [
+		...new Set(
+			(receipt.notes ?? [])
+				.map((note) => note.trim())
+				.filter(
+					(note) =>
+						note && !(receipt.reportPeriod && note.startsWith('Rapor dönemi:')),
+				),
+		),
 	];
 }
 export function operationEmail(
 	receipt: OperationReceipt,
 	options: { includePdf?: boolean } = {},
 ) {
-	const summary = details(receipt);
+	const summary = receiptMetadata(receipt);
+	const notes = receiptNotes(receipt);
+	const isUmami =
+		receipt.reportSource === 'umami' ||
+		(receipt.kind === 'report' &&
+			receipt.totalFormat === 'number' &&
+			receipt.partyName.startsWith('Umami'));
 	const text = [
 		receipt.title,
 		...summary,
@@ -366,7 +387,7 @@ export function operationEmail(
 			table.headers.join(' | '),
 			...table.rows.map((row) => row.join(' | ')),
 		]),
-		...(receipt.notes ?? []),
+		...notes,
 		receipt.totalLabel +
 			': ' +
 			(receipt.totalFormat === 'number'
@@ -391,8 +412,9 @@ export function operationEmail(
 				.join('');
 			const rows = table.rows
 				.map((row, index) => {
-					const direction =
-						row.includes('Gelir') || row.includes('Satış')
+					const direction = isUmami
+						? null
+						: row.includes('Gelir') || row.includes('Satış')
 							? 'income'
 							: row.includes('Gider') || row.includes('Alış')
 								? 'cost'
@@ -413,25 +435,30 @@ export function operationEmail(
 								const cost = /maliyet|gider|alış/i.test(header);
 								const income = /gelir|satış/i.test(header);
 								const amount = /tutar|toplam|fiyat/i.test(header);
-								const numeric =
-									/[0-9]/.test(cell) &&
-									(signed ||
-										((cost || income || amount) && /₺|TL|TRY/.test(cell)));
-								const color = numeric
-									? signed
-										? /^[−-]/.test(cell.trim())
-											? costColor
-											: incomeColor
-										: cost
-											? costColor
-											: income
-												? incomeColor
-												: direction === 'cost'
-													? costColor
-													: direction === 'income'
-														? incomeColor
-														: '#0f172a'
-									: '#334155';
+								const numeric = isUmami
+									? /[0-9]/.test(cell) && /Tekrar|Pay|Değer|Sayı/.test(header)
+									: /[0-9]/.test(cell) &&
+										(signed ||
+											((cost || income || amount) && /₺|TL|TRY/.test(cell)));
+								const color = isUmami
+									? numeric
+										? '#1d4ed8'
+										: '#334155'
+									: numeric
+										? signed
+											? /^[−-]/.test(cell.trim())
+												? costColor
+												: incomeColor
+											: cost
+												? costColor
+												: income
+													? incomeColor
+													: direction === 'cost'
+														? costColor
+														: direction === 'income'
+															? incomeColor
+															: '#0f172a'
+										: '#334155';
 								return (
 									'<td style="padding:10px 8px;border-bottom:1px solid #dbeafe;background-color:' +
 									background +
@@ -473,6 +500,16 @@ export function operationEmail(
 		options.includePdf === false
 			? 'PDF eki kapalı; bu e-posta yalnızca özeti içerir.'
 			: 'Ayrıntılı PDF dosyası e-postanın ekler bölümündedir. Önizleme görünmüyorsa eki indirerek açabilirsiniz.';
+	const notesHtml = notes.length
+		? '<div style="margin-top:20px;padding:12px;background-color:#eff6ff;border-left:3px solid #3b82f6">' +
+			notes
+				.map(
+					(note) =>
+						'<p style="margin:5px 0;font-size:12px">' + escape(note) + '</p>',
+				)
+				.join('') +
+			'</div>'
+		: '';
 	const html =
 		'<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background-color:#eaf0f8;font-family:Arial,sans-serif;color:#0f172a"><div style="max-width:900px;margin:0 auto;background-color:#ffffff;padding:20px"><div style="background-color:#172554;color:#ffffff;padding:20px;border-radius:8px"><p style="margin:0 0 8px;font-size:12px;color:#bfdbfe">HY GLOBAL ÇÖPÇÜ</p><h1 style="margin:0;font-size:22px">' +
 		escape(receipt.title) +
@@ -485,20 +522,17 @@ export function operationEmail(
 					'</p>',
 			)
 			.join('') +
-		'</div><p style="font-size:11px;color:#475569"><span style="color:' +
-		incomeColor +
-		'">● Gelir / satış</span> &nbsp; <span style="color:' +
-		costColor +
-		'">● Gider / maliyet</span></p>' +
+		'</div>' +
+		(isUmami
+			? ''
+			: '<p style="font-size:11px;color:#475569"><span style="color:' +
+				incomeColor +
+				'">● Gelir / satış</span> &nbsp; <span style="color:' +
+				costColor +
+				'">● Gider / maliyet</span></p>') +
 		tableHtml +
-		'<div style="margin-top:20px;padding:12px;background-color:#eff6ff;border-left:3px solid #3b82f6">' +
-		(receipt.notes ?? [])
-			.map(
-				(note) =>
-					'<p style="margin:5px 0;font-size:12px">' + escape(note) + '</p>',
-			)
-			.join('') +
-		'</div><p style="padding:14px;background-color:#172554;color:#ffffff;font-size:16px;font-weight:bold;border-radius:6px">' +
+		notesHtml +
+		'<p style="padding:14px;background-color:#172554;color:#ffffff;font-size:16px;font-weight:bold;border-radius:6px">' +
 		escape(receipt.totalLabel) +
 		': ' +
 		escape(
@@ -514,7 +548,7 @@ export function operationEmail(
 export function operationDocument(
 	receipt: OperationReceipt,
 ): TDocumentDefinitions {
-	const metadataContent: Content[] = details(receipt).map((text) => ({
+	const metadataContent: Content[] = receiptMetadata(receipt).map((text) => ({
 		text,
 		fontSize: 10,
 		margin: [0, 0, 0, 5],
@@ -540,7 +574,7 @@ export function operationDocument(
 						: []),
 					purchasePdfTable(table.headers, table.rows),
 				]),
-			...(receipt.notes ?? []).map(
+			...receiptNotes(receipt).map(
 				(text) => ({ text, fontSize: 9, margin: [0, 10, 0, 0] }) as Content,
 			),
 			{
