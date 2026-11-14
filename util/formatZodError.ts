@@ -5,6 +5,6 @@ import type { ZodError } from 'zod';
 // can't reuse a body-reassigning middleware the same way).
 export function formatZodError(error: ZodError): string {
 	return error.issues
-		.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`)
+		.map((issue) => `${issue.path.join('.') || 'İstek'}: ${issue.message}`)
 		.join('; ');
 }

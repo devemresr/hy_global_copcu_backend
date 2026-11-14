@@ -1,4 +1,8 @@
 import express from 'express';
+import type { ErrorRequestHandler } from 'express';
+import { HttpError } from './errors/HttpError';
+import { handleHttpError } from './errors/handleHttpError';
+import logger from './util/logger';
 import corsOptions from './config/corsOptions';
 import credentials from './config/credentials';
 import cors from 'cors';
@@ -39,5 +43,40 @@ app.use(orderRoutes());
 app.use(bayiRoutes());
 app.use(stockRoutes());
 app.use(financeRoutes());
+
+app.use((_req, res) => {
+	res
+		.status(404)
+		.json({ success: false, message: 'İstenen adres bulunamadı.' });
+});
+
+// Handle parser and middleware failures before Express emits an English page.
+const handleAppError: ErrorRequestHandler = (error, _req, res, next) => {
+	if (res.headersSent) return next(error);
+	if (error?.type === 'entity.parse.failed') {
+		return handleHttpError(
+			new HttpError(
+				'Invalid JSON body',
+				400,
+				'İstek işlenemedi. Lütfen bilgileri kontrol edip tekrar deneyin.',
+			),
+			res,
+			logger,
+		);
+	}
+	if (error?.type === 'entity.too.large') {
+		return handleHttpError(
+			new HttpError(
+				'Request body too large',
+				413,
+				'Gönderilen veri izin verilen boyutu aşıyor.',
+			),
+			res,
+			logger,
+		);
+	}
+	handleHttpError(error, res, logger);
+};
+app.use(handleAppError);
 
 export default app;

@@ -18,7 +18,7 @@ describe('refresh token rotation - reuse detection and grace window', () => {
 
 		const replay = await refresh(stolen);
 		expect(replay.status).toBe(401);
-		expect(replay.body.message).toMatch(/Session has been revoked/i);
+		expect(replay.body.message).toMatch(/Oturumunuz sonlandırıldı/);
 		expect(await Session.countDocuments()).toBe(0);
 
 		// The legitimate holder is logged out too.

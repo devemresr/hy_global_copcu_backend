@@ -7,7 +7,6 @@ import {
 	ExpiredRefreshTokenError,
 	InvalidRefreshToken,
 } from '../services/auth/auth.errors';
-import env from '../config/env';
 
 /**
  * Single catch-all dispatcher for every typed HttpError across the API -
@@ -23,13 +22,11 @@ export const handleHttpError = (
 ): void => {
 	if (error instanceof HttpError) {
 		log.warn({ err: error }, error.message);
-		res
-			.status(error.statusCode)
-			.json({
-				success: false,
-				message: error.clientMessage,
-				...(error.details === undefined ? {} : { details: error.details }),
-			});
+		res.status(error.statusCode).json({
+			success: false,
+			message: error.clientMessage,
+			...(error.details === undefined ? {} : { details: error.details }),
+		});
 		return;
 	}
 
@@ -49,12 +46,14 @@ export const handleHttpError = (
 		log.error({ err: error }, 'Unexpected error');
 		res.status(500).json({
 			success: false,
-			message: 'Internal server error',
-			...(env.NODE_ENV !== 'production' && { detail: error.message }),
+			message: 'Sunucuda beklenmedik bir hata oluştu. Lütfen tekrar deneyin.',
 		});
 		return;
 	}
 
 	log.error({ err: error }, 'Unknown non-Error thrown');
-	res.status(500).json({ success: false, message: 'Internal server error' });
+	res.status(500).json({
+		success: false,
+		message: 'Sunucuda beklenmedik bir hata oluştu. Lütfen tekrar deneyin.',
+	});
 };

@@ -1,5 +1,5 @@
 import { normalizeBayiPhone } from '../util/bayiPhone';
-import { z } from 'zod';
+import { z } from '../util/zodTurkish';
 
 export const normalizeBayiName = (name: string) =>
 	name

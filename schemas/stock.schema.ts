@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../util/zodTurkish';
 import { ORDER_PRODUCT_TYPES } from '../constants/orderProducts.constant';
 
 const product = {

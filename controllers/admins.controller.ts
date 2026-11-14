@@ -75,11 +75,11 @@ export const updateAdminPermissions = async (
 		const target = await User.findById(id).select('role').lean();
 		if (!target) {
 			log.warn('Admin not found');
-			throw new NotFoundError('Admin');
+			throw new NotFoundError('Yönetici');
 		}
 		if (target.role === ADMIN_ROLES.HEAD_ADMIN) {
 			log.warn("Refused to change a head admin's permissions");
-			throw new ValidationError("A head admin's permissions can't be changed");
+			throw new ValidationError('Baş yöneticinin yetkileri değiştirilemez.');
 		}
 
 		const admin = await User.findByIdAndUpdate(

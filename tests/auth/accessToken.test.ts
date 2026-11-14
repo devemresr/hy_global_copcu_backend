@@ -20,13 +20,13 @@ describe('requireAuth - access token on a protected route', () => {
 		await wait(TIMING.ACCESS_EXPIRED_MS);
 		const res = await getProtected(accessToken);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Access token expired/i);
+		expect(res.body.message).toMatch(/Oturum süresi doldu/);
 	});
 
 	it('malformed access token - 401 invalid', async () => {
 		const res = await getProtected('this.is.malformedToken');
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Invalid access token/i);
+		expect(res.body.message).toMatch(/Giriş bilgisi geçersiz/);
 	});
 
 	it('token signed with the wrong secret - 401 invalid', async () => {
@@ -40,7 +40,7 @@ describe('requireAuth - access token on a protected route', () => {
 		);
 		const res = await getProtected(forged);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Invalid access token/i);
+		expect(res.body.message).toMatch(/Giriş bilgisi geçersiz/);
 	});
 
 	it('unsigned (alg: none) token - 401 invalid', async () => {
@@ -49,13 +49,13 @@ describe('requireAuth - access token on a protected route', () => {
 		});
 		const res = await getProtected(unsigned);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Invalid access token/i);
+		expect(res.body.message).toMatch(/Giriş bilgisi geçersiz/);
 	});
 
 	it('refresh token used as a Bearer token - 401 invalid', async () => {
 		const { cookie } = await loginAndGetTokens();
 		const res = await getProtected(cookie.split('=')[1]);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Invalid access token/i);
+		expect(res.body.message).toMatch(/Giriş bilgisi geçersiz/);
 	});
 });

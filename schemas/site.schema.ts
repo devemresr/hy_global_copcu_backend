@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../util/zodTurkish';
 import { NOTICE_TYPES } from '../models/AppState';
 
 // ISO timestamp; null/omitted means "from now" / "until turned off".
@@ -18,7 +18,7 @@ const fromBeforeUntil = <
 ) =>
 	!value.from || !value.until || new Date(value.from) < new Date(value.until);
 const fromBeforeUntilMessage = {
-	message: 'from must be before until',
+	message: 'Başlangıç tarihi bitiş tarihinden önce olmalıdır.',
 	path: ['until'],
 };
 
@@ -31,7 +31,7 @@ export const updateNoticeSchema = scheduleSchema
 	.extend({
 		type: z.enum(NOTICE_TYPES),
 		pages: z
-			.array(z.string().regex(/^\/[\w\-/]*$/, 'Invalid page path'))
+			.array(z.string().regex(/^\/[\w\-/]*$/, 'Sayfa yolu geçersiz.'))
 			.max(20),
 		dismissible: z.boolean(),
 	})

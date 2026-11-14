@@ -8,6 +8,9 @@ import { rateLimit } from 'express-rate-limit';
 export const apiLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
 	limit: 300,
+	message: {
+		error: 'Çok fazla istek gönderdiniz. Lütfen daha sonra tekrar deneyin.',
+	},
 	standardHeaders: true,
 	legacyHeaders: false,
 });
@@ -19,5 +22,8 @@ export const loginLimiter = rateLimit({
 	limit: 10,
 	standardHeaders: true,
 	legacyHeaders: false,
-	message: { error: 'Too many login attempts - try again later' },
+	message: {
+		error:
+			'Çok fazla giriş denemesi yaptınız. Lütfen daha sonra tekrar deneyin.',
+	},
 });

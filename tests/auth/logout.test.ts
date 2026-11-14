@@ -24,7 +24,7 @@ describe('POST logout', () => {
 
 		const after = await refresh(cookie);
 		expect(after.status).toBe(401);
-		expect(after.body.message).toMatch(/Session has been revoked/i);
+		expect(after.body.message).toMatch(/Oturumunuz sonlandırıldı/);
 	});
 
 	it('only ends the current session', async () => {

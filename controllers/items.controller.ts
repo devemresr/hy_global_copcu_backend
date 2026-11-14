@@ -251,7 +251,7 @@ export const updateItem = async (
 		const previous = await Item.findOne({ _id: id, deletedAt: null }).lean();
 		if (!previous) {
 			log.warn('Item not found');
-			throw new NotFoundError('Item');
+			throw new NotFoundError('Ürün');
 		}
 
 		const item = await withVersionBump(async (version) => {
@@ -269,7 +269,7 @@ export const updateItem = async (
 
 		if (!item) {
 			log.warn('Item not found after update');
-			throw new NotFoundError('Item');
+			throw new NotFoundError('Ürün');
 		}
 
 		// update only ever has keys that were actually sent (see updateItemSchema's
@@ -490,15 +490,13 @@ export const bulkDeleteItems = async (
 			},
 			'Items bulk deleted',
 		);
-		res
-			.status(200)
-			.json({
-				success: true,
-				matchedCount: deletedItems.length,
-				deletedCount: deletedItems.length,
-				deletedIds: deletedItems.map((item) => String(item._id)),
-				version,
-			});
+		res.status(200).json({
+			success: true,
+			matchedCount: deletedItems.length,
+			deletedCount: deletedItems.length,
+			deletedIds: deletedItems.map((item) => String(item._id)),
+			version,
+		});
 	} catch (error) {
 		handleHttpError(error, res, log);
 	}
@@ -526,7 +524,7 @@ export const deleteItem = async (
 
 		if (!item) {
 			log.warn('Item not found');
-			throw new NotFoundError('Item');
+			throw new NotFoundError('Ürün');
 		}
 
 		const changedFields: FieldChange[] = EDITABLE_ITEM_FIELDS.map((field) => ({

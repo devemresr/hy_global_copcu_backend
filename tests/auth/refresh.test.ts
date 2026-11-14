@@ -37,7 +37,7 @@ describe('POST refresh', () => {
 	it('no refresh cookie - 401', async () => {
 		const res = await refresh();
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/No refresh token provided/i);
+		expect(res.body.message).toMatch(/Oturum yenileme bilgisi eksik/);
 	});
 
 	it('expired refresh token - 401, must re-login', async () => {
@@ -45,7 +45,7 @@ describe('POST refresh', () => {
 		await wait(TIMING.REFRESH_EXPIRED_MS);
 		const res = await refresh(cookie);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Refresh token expired/i);
+		expect(res.body.message).toMatch(/Oturum yenileme süresi doldu/);
 	});
 
 	it('sliding expiry - an active session outlives the first refresh token', async () => {
@@ -61,7 +61,7 @@ describe('POST refresh', () => {
 	it('malformed refresh cookie - 401 and cookie cleared', async () => {
 		const res = await refresh(`${REFRESH_COOKIE_NAME}=garbage`);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Invalid refresh token/i);
+		expect(res.body.message).toMatch(/Oturum yenileme bilgisi geçersiz/);
 		expect(getRefreshSetCookie(res)).toMatch(/Expires=Thu, 01 Jan 1970/);
 	});
 
@@ -79,7 +79,7 @@ describe('POST refresh', () => {
 		);
 		const res = await refresh(`${REFRESH_COOKIE_NAME}=${legacy}`);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Invalid refresh token/i);
+		expect(res.body.message).toMatch(/Oturum yenileme bilgisi geçersiz/);
 	});
 
 	it('user deleted after login - 401 invalid session', async () => {
@@ -87,7 +87,7 @@ describe('POST refresh', () => {
 		await User.deleteMany({});
 		const res = await refresh(cookie);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Invalid session/i);
+		expect(res.body.message).toMatch(/Oturum geçersiz/);
 	});
 
 	it('session past its absolute cap - 401 even with a live refresh token', async () => {
@@ -95,7 +95,7 @@ describe('POST refresh', () => {
 		await Session.updateMany({}, { expiresAt: new Date(Date.now() - 1_000) });
 		const res = await refresh(cookie);
 		expect(res.status).toBe(401);
-		expect(res.body.message).toMatch(/Session has been revoked/i);
+		expect(res.body.message).toMatch(/Oturumunuz sonlandırıldı/);
 	});
 
 	it('rotated cookie lifetime is capped by the session absolute expiry', async () => {

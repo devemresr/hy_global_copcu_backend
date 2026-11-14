@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../util/zodTurkish';
 import { PERMISSIONS } from '../constants/permissions.constant';
 
 // z.nativeEnum accepts any plain string-valued object, so PERMISSIONS (the
@@ -7,9 +7,13 @@ import { PERMISSIONS } from '../constants/permissions.constant';
 const permissionSchema = z.nativeEnum(PERMISSIONS);
 
 export const createAdminSchema = z.object({
-	email: z.string().trim().toLowerCase().email('A valid email is required'),
-	username: z.string().trim().min(1, 'username is required'),
-	password: z.string().min(1, 'password is required'),
+	email: z
+		.string()
+		.trim()
+		.toLowerCase()
+		.email('Geçerli bir e-posta adresi girin.'),
+	username: z.string().trim().min(1, 'Kullanıcı adı girin.'),
+	password: z.string().min(1, 'Şifre girin.'),
 	permissions: z.array(permissionSchema).default([]),
 });
 

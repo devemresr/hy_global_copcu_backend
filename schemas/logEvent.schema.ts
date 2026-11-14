@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../util/zodTurkish';
 import { LOG_ENTITY_TYPES } from '../models/LogEvent';
 
 const DEFAULT_PAGE_SIZE = 20;

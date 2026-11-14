@@ -27,21 +27,24 @@ export class HttpError extends Error {
 export class UnauthorizedError extends HttpError {
 	constructor(
 		message = 'Not authenticated',
-		clientMessage = 'Invalid session',
+		clientMessage = 'Oturum geçersiz. Lütfen yeniden giriş yapın.',
 	) {
 		super(message, 401, clientMessage);
 	}
 }
 
 export class ForbiddenError extends HttpError {
-	constructor(message = 'Not permitted', clientMessage = 'Forbidden') {
+	constructor(
+		message = 'Not permitted',
+		clientMessage = 'Bu işlemi yapma yetkiniz yok.',
+	) {
 		super(message, 403, clientMessage);
 	}
 }
 
 export class NotFoundError extends HttpError {
 	constructor(resource: string) {
-		super(`${resource} not found`, 404, `${resource} not found`);
+		super(`${resource} not found`, 404, `${resource} bulunamadı.`);
 	}
 }
 

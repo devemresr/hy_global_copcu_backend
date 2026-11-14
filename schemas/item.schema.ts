@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../util/zodTurkish';
 import { isPowerOfTwo, STORAGE_POWER_WARNING } from '../util/storageSize';
 
 export const CURRENCY_VALUES = ['TRY', 'USD'] as const;
@@ -21,18 +21,18 @@ export type StorageUnit = z.infer<typeof storageUnitSchema>;
 // fiyat each split into a plain magnitude plus a required unit
 // (depolamaBirimi/paraBirimi) rather than one combined string like "128GB".
 export const editableItemFieldsSchema = z.object({
-	model: z.string().trim().min(1, 'Model is required'),
+	model: z.string().trim().min(1, 'Model girin.'),
 	bellekTipi: z.string().trim().min(1).nullable().optional(),
 	depolama: z
 		.number()
-		.positive('depolama must be a positive number')
+		.positive('Depolama kapasitesi sıfırdan büyük bir sayı olmalıdır.')
 		.refine(isPowerOfTwo, STORAGE_POWER_WARNING)
 		.nullable(),
 	depolamaBirimi: storageUnitSchema,
 	ram: z.string().trim().min(1).nullable().optional(),
 	fiyat: z
 		.number()
-		.nonnegative('fiyat must be a non-negative number')
+		.nonnegative('Fiyat sıfır veya daha büyük bir sayı olmalıdır.')
 		.nullable(),
 	paraBirimi: currencySchema,
 	fiyatBirimi: priceUnitSchema.optional(),
@@ -60,11 +60,11 @@ export const updateItemSchema = editableItemFieldsSchema.partial();
 export const bulkUpdateItemsSchema = z.object({
 	ruleOverrideRevision: z.number().int().nonnegative().optional(),
 	ids: z
-		.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid item id'))
-		.min(1, 'At least one item id is required')
-		.max(1000, 'Too many items in one bulk update'),
+		.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Ürün kimliği geçersiz.'))
+		.min(1, 'En az bir ürün seçin.')
+		.max(1000, 'Tek seferde en fazla 1000 ürün güncelleyebilirsiniz.'),
 	fields: updateItemSchema.refine((fields) => Object.keys(fields).length > 0, {
-		message: 'At least one field to update is required',
+		message: 'Güncellenecek en az bir alan seçin.',
 	}),
 });
 
@@ -75,9 +75,9 @@ export type BulkUpdateItemsInput = z.infer<typeof bulkUpdateItemsSchema>;
 export const bulkDeleteItemsSchema = z
 	.object({
 		ids: z
-			.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid item id'))
-			.min(1, 'At least one item id is required')
-			.max(1000, 'Too many items in one bulk delete')
+			.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Ürün kimliği geçersiz.'))
+			.min(1, 'En az bir ürün seçin.')
+			.max(1000, 'Tek seferde en fazla 1000 ürün silebilirsiniz.')
 			.transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]),
 	})
 	.strict();

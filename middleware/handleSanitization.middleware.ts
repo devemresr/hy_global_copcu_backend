@@ -15,7 +15,7 @@ export const handleSanitization = (
 		// reassigning we should be able to do this in the mongo-sanitize library
 		// but because of a known issue we cant
 		if (!success) {
-			return res.status(400).json({ error: 'Invalid request format' });
+			return res.status(400).json({ error: 'İstek biçimi geçersiz.' });
 		}
 	}
 

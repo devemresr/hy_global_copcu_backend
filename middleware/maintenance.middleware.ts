@@ -38,7 +38,8 @@ export const blockPublicDuringMaintenance = async (
 		}
 
 		res.status(503).json({
-			error: 'Service temporarily unavailable',
+			error:
+				'Hizmet geçici olarak kullanılamıyor. Lütfen daha sonra tekrar deneyin.',
 			maintenance: getMaintenance(),
 		});
 	} catch (error) {
