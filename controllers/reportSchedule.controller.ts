@@ -20,6 +20,7 @@ import env from '../config/env';
 import { randomUUID } from 'node:crypto';
 import { scheduledReportReceipt } from '../services/email/scheduledReportReceipt.service';
 import { sendReceiptEmail } from '../services/email/transactionEmail.service';
+import { operationEmail } from '../services/email/operationReceipt.service';
 import { umamiConfigured } from '../services/email/umamiReport.service';
 
 const log = logger.child({ module: 'reportSchedules' });
@@ -106,33 +107,55 @@ export async function deleteReportSchedule(req: Request, res: Response) {
 	}
 }
 
+async function developmentReport(req: Request) {
+	if (env.NODE_ENV !== 'development') throw new NotFoundError('İşlem');
+	const id = scheduleId(req);
+	const schedule = await ReportSchedule.findById(id).lean();
+	if (!schedule) throw new NotFoundError('Zamanlama');
+	const adminId = requireUserId(req),
+		admin = await User.findById(adminId).select('username').lean();
+	if (!admin) throw new UnauthorizedError();
+	const input = reportScheduleSchema.parse({
+		name: schedule.name,
+		source: schedule.source ?? 'analysis',
+		includeData: schedule.includeData,
+		analysisUrl: schedule.analysisUrl,
+		enabled: schedule.enabled,
+		includePdf: schedule.includePdf,
+		frequency: schedule.frequency,
+		time: schedule.time,
+		weekday: schedule.weekday,
+		monthDay: schedule.monthDay,
+		relativePeriod: schedule.relativePeriod,
+		recipients: schedule.recipients,
+	});
+	const receipt = await scheduledReportReceipt(
+		{ ...input, adminId, adminName: admin.username },
+		`dev-${id}-${randomUUID()}`,
+	);
+	return { id, adminId, input, receipt };
+}
+export async function previewReportSchedule(req: Request, res: Response) {
+	try {
+		const { input, receipt } = await developmentReport(req);
+		const email = operationEmail(receipt, { includePdf: input.includePdf });
+		res.json({
+			subject: email.subject,
+			html: email.html,
+			attachments: [
+				...(input.includePdf
+					? [receipt.kind + '-' + receipt.recordId + '.pdf']
+					: []),
+				...(receipt.extraAttachments ?? []).map((file) => file.filename),
+			],
+		});
+	} catch (error) {
+		handleHttpError(error, res, log);
+	}
+}
 export async function sendReportScheduleNow(req: Request, res: Response) {
 	try {
-		if (env.NODE_ENV !== 'development') throw new NotFoundError('İşlem');
-		const id = scheduleId(req);
-		const schedule = await ReportSchedule.findById(id).lean();
-		if (!schedule) throw new NotFoundError('Zamanlama');
-		const adminId = requireUserId(req),
-			admin = await User.findById(adminId).select('username').lean();
-		if (!admin) throw new UnauthorizedError();
-		const input = reportScheduleSchema.parse({
-			name: schedule.name,
-			source: schedule.source ?? 'analysis',
-			includeData: schedule.includeData,
-			analysisUrl: schedule.analysisUrl,
-			enabled: schedule.enabled,
-			includePdf: schedule.includePdf,
-			frequency: schedule.frequency,
-			time: schedule.time,
-			weekday: schedule.weekday,
-			monthDay: schedule.monthDay,
-			relativePeriod: schedule.relativePeriod,
-			recipients: schedule.recipients,
-		});
-		const receipt = await scheduledReportReceipt(
-			{ ...input, adminId, adminName: admin.username },
-			`dev-${id}-${randomUUID()}`,
-		);
+		const { id, adminId, input, receipt } = await developmentReport(req);
 		await sendReceiptEmail(receipt, {
 			recipients: input.recipients,
 			includePdf: input.includePdf,

@@ -21,6 +21,7 @@ import {
 	saveReportSchedule,
 	deleteReportSchedule,
 	sendReportScheduleNow,
+	previewReportSchedule,
 } from '../controllers/reportSchedule.controller';
 import env from '../config/env';
 import {
@@ -76,6 +77,13 @@ const router = () => {
 		saveEmailPreferences,
 	);
 	if (env.NODE_ENV === 'development') {
+		router.post(
+			'/admins/report-schedules/:id/preview',
+			...requireAuth(),
+			requireHeadAdmin,
+			emailLimiter,
+			previewReportSchedule,
+		);
 		router.post(
 			'/admins/inventory-snapshot/refresh-now',
 			...requireAuth(),
