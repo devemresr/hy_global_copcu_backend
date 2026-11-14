@@ -1,3 +1,5 @@
+import { queueTransactionEmail } from '../services/email/transactionEmail.service';
+import { purchaseReceipt } from '../services/email/operationReceipt.service';
 import { loadPartyDirectory } from '../services/partyIdentity.service';
 import {
 	orderNumericExpression,
@@ -152,332 +154,343 @@ export const createOrder = async (
 		});
 		// Saving this purchase advances this supplier's warning cycle in MongoDB.
 		// No reset is attempted on a failed mutation, and no toast state is involved.
+		await queueTransactionEmail(
+			purchaseReceipt(order.toObject(), {
+				adminId,
+				adminUsername: actor.username,
+			}),
+		);
 		res.status(201).json({ order, warnings });
 	} catch (error) {
 		handleHttpError(error, res, logger);
 	}
 };
 
+export async function orderReportData(rawQuery: unknown, allRows = false) {
+	const parsed = orderQuerySchema.safeParse(rawQuery);
+	if (!parsed.success)
+		throw new ValidationError(
+			parsed.error.issues.map((i) => i.message).join(' '),
+		);
+	const q = parsed.data;
+	if (allRows) {
+		q.page = 1;
+		q.pageSize = 2_147_483_647;
+	}
+	const parties = await loadPartyDirectory();
+	const filter: QueryFilter<typeof Order.schema> = {};
+	const bayiIds = q.bayiIds?.length ? q.bayiIds : q.bayiId ? [q.bayiId] : [];
+	if (bayiIds.length) {
+		const ids = new Set(bayiIds);
+		const legacy = [...parties.purchases]
+			.filter(([, party]) => party.bayiId && ids.has(party.bayiId))
+			.map(([id]) => new Types.ObjectId(id));
+		filter.$or = [
+			{ bayiId: { $in: bayiIds.map((id) => new Types.ObjectId(id)) } },
+			{ _id: { $in: legacy } },
+		];
+	}
+	if (!bayiIds.length && q.bayiName)
+		filter.name = {
+			$regex: q.bayiName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+			$options: 'i',
+		};
+	if (q.purchaseId) filter._id = new Types.ObjectId(q.purchaseId);
+	if (q.excludeIds?.length)
+		filter._id = {
+			...(q.purchaseId ? { $eq: new Types.ObjectId(q.purchaseId) } : {}),
+			$nin: q.excludeIds.map((id) => new Types.ObjectId(id)),
+		};
+	if (q.from || q.until) {
+		filter.createdAt = {
+			...(q.from ? { $gte: new Date(`${q.from}T00:00:00+03:00`) } : {}),
+			...(q.until
+				? {
+						$lt: new Date(
+							new Date(`${q.until}T00:00:00+03:00`).getTime() + 86400000,
+						),
+					}
+				: {}),
+		};
+	}
+	if (q.minTotal !== undefined || q.maxTotal !== undefined)
+		filter.total = {
+			...(q.minTotal !== undefined ? { $gte: q.minTotal } : {}),
+			...(q.maxTotal !== undefined ? { $lte: q.maxTotal } : {}),
+		};
+	if (
+		q.numericFilters?.some((f) => !numericFieldsFor('orders').includes(f.field))
+	)
+		throw new ValidationError('Bu rapor için geçersiz sayı alanı.');
+	if (q.numericFilters?.length)
+		filter.$expr = orderNumericExpression(q.numericFilters);
+	const memoryTypes = Object.entries(ORDER_PRODUCT_TYPES)
+		.filter(([, product]) => product.requiresMemorySize)
+		.map(([type]) => type);
+	const requiresMemory = {
+		$ifNull: [
+			'$$line.requiresMemorySize',
+			{ $in: ['$$line.type', memoryTypes] },
+		],
+	};
+	const unit = { $ifNull: ['$lines.quantityUnit', 'piece'] };
+	const sumUnit = (quantityUnit: string) => ({
+		$sum: { $cond: [{ $eq: [unit, quantityUnit] }, '$lines.quantity', 0] },
+	});
+	const [result] = await Order.aggregate([
+		{ $match: filter },
+		{
+			$set: {
+				lines: {
+					$map: {
+						input: '$lines',
+						as: 'line',
+						in: {
+							$mergeObjects: [
+								'$$line',
+								{
+									quantityUnit: { $ifNull: ['$$line.quantityUnit', 'piece'] },
+									requiresMemorySize: requiresMemory,
+									memoryGb: {
+										$cond: [
+											requiresMemory,
+											{ $ifNull: ['$$line.memoryGb', null] },
+											null,
+										],
+									},
+								},
+							],
+						},
+					},
+				},
+				unitTotals: {
+					$ifNull: ['$unitTotals', { piece: '$quantity', kg: 0, g: 0 }],
+				},
+			},
+		},
+		{
+			$facet: {
+				timeline: [
+					{ $sort: { createdAt: 1, _id: 1 } },
+					{
+						$project: {
+							_id: 1,
+							name: { $ifNull: ['$name', { $toString: '$_id' }] },
+							createdAt: 1,
+							total: 1,
+							quantity: 1,
+							unitTotals: 1,
+						},
+					},
+				],
+				orders: [
+					{ $sort: { createdAt: -1, _id: -1 } },
+					{ $skip: (q.page - 1) * q.pageSize },
+					{ $limit: q.pageSize },
+					{ $unset: 'lines.listPriceSource' },
+					{ $set: { name: { $ifNull: ['$name', { $toString: '$_id' }] } } },
+				],
+				summary: [
+					{
+						$group: {
+							_id: null,
+							count: { $sum: 1 },
+							total: { $sum: '$total' },
+							quantity: { $sum: '$quantity' },
+							piece: { $sum: '$unitTotals.piece' },
+							kg: { $sum: '$unitTotals.kg' },
+							g: { $sum: '$unitTotals.g' },
+						},
+					},
+					{
+						$project: {
+							count: 1,
+							total: 1,
+							quantity: 1,
+							unitTotals: {
+								piece: '$piece',
+								kg: { $round: ['$kg', 3] },
+								g: { $round: ['$g', 3] },
+							},
+						},
+					},
+				],
+				daily: [
+					{
+						$group: {
+							_id: {
+								$dateToString: {
+									date: '$createdAt',
+									format: '%Y-%m-%d',
+									timezone: 'Europe/Istanbul',
+								},
+							},
+							total: { $sum: '$total' },
+							count: { $sum: 1 },
+						},
+					},
+					{ $sort: { _id: 1 } },
+				],
+				byType: [
+					{ $unwind: '$lines' },
+					{
+						$group: {
+							_id: '$lines.type',
+							total: { $sum: '$lines.total' },
+							quantity: sumUnit('piece'),
+							kg: sumUnit('kg'),
+							g: sumUnit('g'),
+						},
+					},
+					{
+						$project: {
+							total: 1,
+							quantity: 1,
+							unitTotals: {
+								piece: '$quantity',
+								kg: { $round: ['$kg', 3] },
+								g: { $round: ['$g', 3] },
+							},
+						},
+					},
+					{ $sort: { total: -1, _id: 1 } },
+				],
+				byMemory: [
+					{ $unwind: '$lines' },
+					{
+						$match: {
+							'lines.requiresMemorySize': true,
+							'lines.quantityUnit': 'piece',
+							'lines.memoryGb': { $type: 'number' },
+						},
+					},
+					{
+						$group: {
+							_id: '$lines.memoryGb',
+							total: { $sum: '$lines.total' },
+							quantity: { $sum: '$lines.quantity' },
+						},
+					},
+					{ $sort: { _id: 1 } },
+				],
+				byTypeAndMemory: [
+					{ $unwind: '$lines' },
+					{
+						$group: {
+							_id: {
+								type: '$lines.type',
+								memoryGb: '$lines.memoryGb',
+								quantityUnit: '$lines.quantityUnit',
+								requiresMemorySize: '$lines.requiresMemorySize',
+							},
+							total: { $sum: '$lines.total' },
+							quantity: { $sum: '$lines.quantity' },
+						},
+					},
+					{
+						$project: {
+							_id: 0,
+							type: '$_id.type',
+							memoryGb: '$_id.memoryGb',
+							quantityUnit: '$_id.quantityUnit',
+							requiresMemorySize: '$_id.requiresMemorySize',
+							quantity: { $round: ['$quantity', 3] },
+							total: 1,
+						},
+					},
+					{ $sort: { type: 1, memoryGb: 1, quantityUnit: 1 } },
+				],
+				missingListPrices: [
+					{ $unwind: '$lines' },
+					{ $match: { 'lines.originalUnitPrice': null } },
+					{
+						$project: {
+							_id: 0,
+							orderId: { $toString: '$_id' },
+							orderName: { $ifNull: ['$name', { $toString: '$_id' }] },
+							createdAt: 1,
+							type: '$lines.type',
+							memoryGb: '$lines.memoryGb',
+							quantityUnit: '$lines.quantityUnit',
+							requiresMemorySize: '$lines.requiresMemorySize',
+							quantity: '$lines.quantity',
+							unitPrice: '$lines.unitPrice',
+							total: '$lines.total',
+						},
+					},
+					{ $sort: { createdAt: -1, orderId: 1 } },
+				],
+				adjustments: [
+					{ $unwind: '$lines' },
+					{
+						$match: {
+							'lines.originalUnitPrice': { $type: 'number' },
+							$expr: {
+								$ne: ['$lines.unitPrice', '$lines.originalUnitPrice'],
+							},
+						},
+					},
+					{
+						$project: {
+							_id: 0,
+							orderId: { $toString: '$_id' },
+							orderName: { $ifNull: ['$name', { $toString: '$_id' }] },
+							createdAt: 1,
+							type: '$lines.type',
+							memoryGb: '$lines.memoryGb',
+							quantityUnit: '$lines.quantityUnit',
+							requiresMemorySize: '$lines.requiresMemorySize',
+							quantity: '$lines.quantity',
+							originalUnitPrice: '$lines.originalUnitPrice',
+							unitPrice: '$lines.unitPrice',
+							priceAdjustment: '$lines.priceAdjustment',
+							totalAdjustment: {
+								$round: [
+									{
+										$multiply: ['$lines.priceAdjustment', '$lines.quantity'],
+									},
+									2,
+								],
+							},
+						},
+					},
+					{ $sort: { createdAt: -1, orderId: 1 } },
+				],
+			},
+		},
+	]);
+	const summary = result.summary[0] ?? { count: 0, total: 0, quantity: 0 };
+	return {
+		bayiFilterName: bayiIds.length
+			? bayiIds.map((id) => parties.bayi.currentName(id) ?? id).join(', ')
+			: (q.bayiName ?? null),
+		orders: result.orders.map((row: { _id: unknown }) => ({
+			...row,
+			...parties.purchases.get(String(row._id)),
+		})),
+		timeline: result.timeline.map((row: { _id: unknown }) => ({
+			...row,
+			...parties.purchases.get(String(row._id)),
+		})),
+		summary,
+		daily: result.daily,
+		byType: result.byType,
+		byMemory: result.byMemory,
+		byTypeAndMemory: result.byTypeAndMemory,
+		adjustments: result.adjustments,
+		missingListPrices: result.missingListPrices,
+		page: q.page,
+		totalPages: Math.max(1, Math.ceil(summary.count / q.pageSize)),
+	};
+}
 export const listOrders = async (
 	req: Request,
 	res: Response,
 ): Promise<void> => {
 	try {
-		const parsed = orderQuerySchema.safeParse(
-			req.method === 'POST' ? req.body : req.query,
+		res.json(
+			await orderReportData(req.method === 'POST' ? req.body : req.query),
 		);
-		if (!parsed.success)
-			throw new ValidationError(
-				parsed.error.issues.map((i) => i.message).join(' '),
-			);
-		const q = parsed.data;
-		const parties = await loadPartyDirectory();
-		const filter: QueryFilter<typeof Order.schema> = {};
-		const bayiIds = q.bayiIds?.length ? q.bayiIds : q.bayiId ? [q.bayiId] : [];
-		if (bayiIds.length) {
-			const ids = new Set(bayiIds);
-			const legacy = [...parties.purchases]
-				.filter(([, party]) => party.bayiId && ids.has(party.bayiId))
-				.map(([id]) => new Types.ObjectId(id));
-			filter.$or = [
-				{ bayiId: { $in: bayiIds.map((id) => new Types.ObjectId(id)) } },
-				{ _id: { $in: legacy } },
-			];
-		}
-		if (!bayiIds.length && q.bayiName)
-			filter.name = {
-				$regex: q.bayiName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-				$options: 'i',
-			};
-		if (q.purchaseId) filter._id = new Types.ObjectId(q.purchaseId);
-		if (q.excludeIds?.length)
-			filter._id = {
-				...(q.purchaseId ? { $eq: new Types.ObjectId(q.purchaseId) } : {}),
-				$nin: q.excludeIds.map((id) => new Types.ObjectId(id)),
-			};
-		if (q.from || q.until) {
-			filter.createdAt = {
-				...(q.from ? { $gte: new Date(`${q.from}T00:00:00+03:00`) } : {}),
-				...(q.until
-					? {
-							$lt: new Date(
-								new Date(`${q.until}T00:00:00+03:00`).getTime() + 86400000,
-							),
-						}
-					: {}),
-			};
-		}
-		if (q.minTotal !== undefined || q.maxTotal !== undefined)
-			filter.total = {
-				...(q.minTotal !== undefined ? { $gte: q.minTotal } : {}),
-				...(q.maxTotal !== undefined ? { $lte: q.maxTotal } : {}),
-			};
-		if (
-			q.numericFilters?.some(
-				(f) => !numericFieldsFor('orders').includes(f.field),
-			)
-		)
-			throw new ValidationError('Bu rapor için geçersiz sayı alanı.');
-		if (q.numericFilters?.length)
-			filter.$expr = orderNumericExpression(q.numericFilters);
-		const memoryTypes = Object.entries(ORDER_PRODUCT_TYPES)
-			.filter(([, product]) => product.requiresMemorySize)
-			.map(([type]) => type);
-		const requiresMemory = {
-			$ifNull: [
-				'$$line.requiresMemorySize',
-				{ $in: ['$$line.type', memoryTypes] },
-			],
-		};
-		const unit = { $ifNull: ['$lines.quantityUnit', 'piece'] };
-		const sumUnit = (quantityUnit: string) => ({
-			$sum: { $cond: [{ $eq: [unit, quantityUnit] }, '$lines.quantity', 0] },
-		});
-		const [result] = await Order.aggregate([
-			{ $match: filter },
-			{
-				$set: {
-					lines: {
-						$map: {
-							input: '$lines',
-							as: 'line',
-							in: {
-								$mergeObjects: [
-									'$$line',
-									{
-										quantityUnit: { $ifNull: ['$$line.quantityUnit', 'piece'] },
-										requiresMemorySize: requiresMemory,
-										memoryGb: {
-											$cond: [
-												requiresMemory,
-												{ $ifNull: ['$$line.memoryGb', null] },
-												null,
-											],
-										},
-									},
-								],
-							},
-						},
-					},
-					unitTotals: {
-						$ifNull: ['$unitTotals', { piece: '$quantity', kg: 0, g: 0 }],
-					},
-				},
-			},
-			{
-				$facet: {
-					timeline: [
-						{ $sort: { createdAt: 1, _id: 1 } },
-						{
-							$project: {
-								_id: 1,
-								name: { $ifNull: ['$name', { $toString: '$_id' }] },
-								createdAt: 1,
-								total: 1,
-								quantity: 1,
-								unitTotals: 1,
-							},
-						},
-					],
-					orders: [
-						{ $sort: { createdAt: -1, _id: -1 } },
-						{ $skip: (q.page - 1) * q.pageSize },
-						{ $limit: q.pageSize },
-						{ $unset: 'lines.listPriceSource' },
-						{ $set: { name: { $ifNull: ['$name', { $toString: '$_id' }] } } },
-					],
-					summary: [
-						{
-							$group: {
-								_id: null,
-								count: { $sum: 1 },
-								total: { $sum: '$total' },
-								quantity: { $sum: '$quantity' },
-								piece: { $sum: '$unitTotals.piece' },
-								kg: { $sum: '$unitTotals.kg' },
-								g: { $sum: '$unitTotals.g' },
-							},
-						},
-						{
-							$project: {
-								count: 1,
-								total: 1,
-								quantity: 1,
-								unitTotals: {
-									piece: '$piece',
-									kg: { $round: ['$kg', 3] },
-									g: { $round: ['$g', 3] },
-								},
-							},
-						},
-					],
-					daily: [
-						{
-							$group: {
-								_id: {
-									$dateToString: {
-										date: '$createdAt',
-										format: '%Y-%m-%d',
-										timezone: 'Europe/Istanbul',
-									},
-								},
-								total: { $sum: '$total' },
-								count: { $sum: 1 },
-							},
-						},
-						{ $sort: { _id: 1 } },
-					],
-					byType: [
-						{ $unwind: '$lines' },
-						{
-							$group: {
-								_id: '$lines.type',
-								total: { $sum: '$lines.total' },
-								quantity: sumUnit('piece'),
-								kg: sumUnit('kg'),
-								g: sumUnit('g'),
-							},
-						},
-						{
-							$project: {
-								total: 1,
-								quantity: 1,
-								unitTotals: {
-									piece: '$quantity',
-									kg: { $round: ['$kg', 3] },
-									g: { $round: ['$g', 3] },
-								},
-							},
-						},
-						{ $sort: { total: -1, _id: 1 } },
-					],
-					byMemory: [
-						{ $unwind: '$lines' },
-						{
-							$match: {
-								'lines.requiresMemorySize': true,
-								'lines.quantityUnit': 'piece',
-								'lines.memoryGb': { $type: 'number' },
-							},
-						},
-						{
-							$group: {
-								_id: '$lines.memoryGb',
-								total: { $sum: '$lines.total' },
-								quantity: { $sum: '$lines.quantity' },
-							},
-						},
-						{ $sort: { _id: 1 } },
-					],
-					byTypeAndMemory: [
-						{ $unwind: '$lines' },
-						{
-							$group: {
-								_id: {
-									type: '$lines.type',
-									memoryGb: '$lines.memoryGb',
-									quantityUnit: '$lines.quantityUnit',
-									requiresMemorySize: '$lines.requiresMemorySize',
-								},
-								total: { $sum: '$lines.total' },
-								quantity: { $sum: '$lines.quantity' },
-							},
-						},
-						{
-							$project: {
-								_id: 0,
-								type: '$_id.type',
-								memoryGb: '$_id.memoryGb',
-								quantityUnit: '$_id.quantityUnit',
-								requiresMemorySize: '$_id.requiresMemorySize',
-								quantity: { $round: ['$quantity', 3] },
-								total: 1,
-							},
-						},
-						{ $sort: { type: 1, memoryGb: 1, quantityUnit: 1 } },
-					],
-					missingListPrices: [
-						{ $unwind: '$lines' },
-						{ $match: { 'lines.originalUnitPrice': null } },
-						{
-							$project: {
-								_id: 0,
-								orderId: { $toString: '$_id' },
-								orderName: { $ifNull: ['$name', { $toString: '$_id' }] },
-								createdAt: 1,
-								type: '$lines.type',
-								memoryGb: '$lines.memoryGb',
-								quantityUnit: '$lines.quantityUnit',
-								requiresMemorySize: '$lines.requiresMemorySize',
-								quantity: '$lines.quantity',
-								unitPrice: '$lines.unitPrice',
-								total: '$lines.total',
-							},
-						},
-						{ $sort: { createdAt: -1, orderId: 1 } },
-					],
-					adjustments: [
-						{ $unwind: '$lines' },
-						{
-							$match: {
-								'lines.originalUnitPrice': { $type: 'number' },
-								$expr: {
-									$ne: ['$lines.unitPrice', '$lines.originalUnitPrice'],
-								},
-							},
-						},
-						{
-							$project: {
-								_id: 0,
-								orderId: { $toString: '$_id' },
-								orderName: { $ifNull: ['$name', { $toString: '$_id' }] },
-								createdAt: 1,
-								type: '$lines.type',
-								memoryGb: '$lines.memoryGb',
-								quantityUnit: '$lines.quantityUnit',
-								requiresMemorySize: '$lines.requiresMemorySize',
-								quantity: '$lines.quantity',
-								originalUnitPrice: '$lines.originalUnitPrice',
-								unitPrice: '$lines.unitPrice',
-								priceAdjustment: '$lines.priceAdjustment',
-								totalAdjustment: {
-									$round: [
-										{
-											$multiply: ['$lines.priceAdjustment', '$lines.quantity'],
-										},
-										2,
-									],
-								},
-							},
-						},
-						{ $sort: { createdAt: -1, orderId: 1 } },
-					],
-				},
-			},
-		]);
-		const summary = result.summary[0] ?? { count: 0, total: 0, quantity: 0 };
-		res.json({
-			bayiFilterName: bayiIds.length
-				? bayiIds.map((id) => parties.bayi.currentName(id) ?? id).join(', ')
-				: (q.bayiName ?? null),
-			orders: result.orders.map((row: { _id: unknown }) => ({
-				...row,
-				...parties.purchases.get(String(row._id)),
-			})),
-			timeline: result.timeline.map((row: { _id: unknown }) => ({
-				...row,
-				...parties.purchases.get(String(row._id)),
-			})),
-			summary,
-			daily: result.daily,
-			byType: result.byType,
-			byMemory: result.byMemory,
-			byTypeAndMemory: result.byTypeAndMemory,
-			adjustments: result.adjustments,
-			missingListPrices: result.missingListPrices,
-			page: q.page,
-			totalPages: Math.max(1, Math.ceil(summary.count / q.pageSize)),
-		});
 	} catch (error) {
 		handleHttpError(error, res, logger);
 	}

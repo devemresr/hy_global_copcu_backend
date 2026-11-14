@@ -12,9 +12,90 @@ import {
 	updateAdminPermissionsSchema,
 } from '../schemas/admin.schema';
 import { ADMIN_ROUTES } from './routes.constant';
+import { sendAdminTestEmail } from '../controllers/email.controller';
+import { testEmailSchema } from '../schemas/email.schema';
+import { rateLimit } from 'express-rate-limit';
+import { requireUserId } from '../controllers/auth.helper';
+import {
+	listReportSchedules,
+	saveReportSchedule,
+	deleteReportSchedule,
+	sendReportScheduleNow,
+} from '../controllers/reportSchedule.controller';
+import env from '../config/env';
+import {
+	getEmailPreferences,
+	saveEmailPreferences,
+	emailPreferencesSchema,
+} from '../controllers/emailPreferences.controller';
+
+const emailLimiter = rateLimit({
+	windowMs: 60_000,
+	limit: 5,
+	keyGenerator: (req) => requireUserId(req),
+	standardHeaders: true,
+	legacyHeaders: false,
+	message: {
+		success: false,
+		message: 'Çok fazla e-posta isteği. Bir dakika sonra tekrar deneyin.',
+	},
+});
 
 const router = () => {
 	const router = Router();
+	router.get(
+		'/admins/email-preferences',
+		...requireAuth(),
+		requireHeadAdmin,
+		getEmailPreferences,
+	);
+	router.put(
+		'/admins/email-preferences',
+		...requireAuth(),
+		requireHeadAdmin,
+		validateBody(emailPreferencesSchema),
+		saveEmailPreferences,
+	);
+	if (env.NODE_ENV === 'development')
+		router.post(
+			'/admins/report-schedules/:id/send-now',
+			...requireAuth(),
+			requireHeadAdmin,
+			emailLimiter,
+			sendReportScheduleNow,
+		);
+	router.get(
+		'/admins/report-schedules',
+		...requireAuth(),
+		requireHeadAdmin,
+		listReportSchedules,
+	);
+	router.post(
+		'/admins/report-schedules',
+		...requireAuth(),
+		requireHeadAdmin,
+		saveReportSchedule,
+	);
+	router.put(
+		'/admins/report-schedules/:id',
+		...requireAuth(),
+		requireHeadAdmin,
+		saveReportSchedule,
+	);
+	router.delete(
+		'/admins/report-schedules/:id',
+		...requireAuth(),
+		requireHeadAdmin,
+		deleteReportSchedule,
+	);
+	router.post(
+		ADMIN_ROUTES.TEST_EMAIL,
+		...requireAuth(),
+		requireHeadAdmin,
+		validateBody(testEmailSchema),
+		emailLimiter,
+		sendAdminTestEmail,
+	);
 
 	router.get(ADMIN_ROUTES.LIST, ...requireAuth(), requireHeadAdmin, listAdmins);
 	router.post(

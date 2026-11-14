@@ -200,7 +200,7 @@ export async function loadStock() {
 		pool.value = rounded(pool.value + lot.remainingValue);
 		pools.set(key, pool);
 	}
-	return { book, lots, pools, parties };
+	return { book, lots, purchaseLots: lots, pools, parties };
 }
 
 async function insertStockSale(input: StockSaleInput, userId: string) {

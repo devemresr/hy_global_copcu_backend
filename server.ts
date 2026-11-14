@@ -6,6 +6,14 @@ import app from './app';
 import { connectDB, disconnectDB } from './config/db';
 import { initVersionState } from './services/sync/version.service';
 import logger from './util/logger';
+import {
+	startReportSchedules,
+	stopReportSchedules,
+} from './services/email/reportSchedule.service';
+import {
+	startTransactionEmails,
+	stopTransactionEmails,
+} from './services/email/transactionEmail.service';
 
 const log = logger.child({ module: 'server' });
 
@@ -20,6 +28,8 @@ export async function startServer(httpServer: Server): Promise<Server> {
 	log.info('MongoDB connected');
 
 	await initVersionState();
+	startTransactionEmails();
+	startReportSchedules();
 
 	await new Promise<void>((resolve, reject) => {
 		httpServer.once('error', reject);
@@ -50,6 +60,8 @@ export async function gracefulShutdown(server?: Server): Promise<void> {
 		}).catch((err: unknown) => errors.push(err));
 	}
 
+	await stopReportSchedules().catch((err: unknown) => errors.push(err));
+	await stopTransactionEmails().catch((err: unknown) => errors.push(err));
 	await disconnectDB().catch((err: unknown) => errors.push(err));
 
 	if (errors.length > 0) {

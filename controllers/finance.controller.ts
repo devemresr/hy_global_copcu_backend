@@ -1,3 +1,5 @@
+import { queueTransactionEmail } from '../services/email/transactionEmail.service';
+import { financeReceipt } from '../services/email/operationReceipt.service';
 import type { SupplierSale } from '../services/stock.service';
 import {
 	loadPartyDirectory,
@@ -11,7 +13,7 @@ import { normalizeBayiPhone } from '../util/bayiPhone';
 import { Investor } from '../models/Investor';
 import { matchesNumeric } from '../schemas/numericFilters.schema';
 import type { Request, Response } from 'express';
-import { z } from 'zod';
+import { z } from '../util/zodTurkish';
 import {
 	FINANCE_GROUPS,
 	FinanceCategory,
@@ -179,212 +181,223 @@ function dateLabel(value: Date) {
 		parts.find((entry) => entry.type === type)!.value;
 	return `${part('year')}-${part('month')}-${part('day')}`;
 }
-export const getFinance = async (req: Request, res: Response) => {
-	try {
-		const query = parse(orderQuerySchema, req.query),
-			selection = parse(selectionSchema, req.query);
-		if (query.numericFilters?.some((f) => f.field !== 'total'))
-			throw new ValidationError(
-				'Bakiye için yalnızca işlem tutarı filtrelenebilir.',
-			);
-		const [purchase, sales, legacy, manual, subtypes, parties] =
-			await Promise.all([
-				Order.find().select('name bayiId bayiPhone total createdAt').lean(),
-				StockRestock.find()
-					.select('requestId totalRevenue createdAt lines.suppliers')
-					.lean(),
-				StockSale.find().select('requestId revenue createdAt').lean(),
-				FinanceEntry.find({ voidedAt: null }).lean(),
-				categories(),
-				loadPartyDirectory(),
-			]);
-		const rows = financeLedger([
-			...purchase.map((row) => ({
-				id: `purchase:${row._id}`,
-				source: 'purchase',
-				...parties.purchases.get(String(row._id)),
-				group: 'purchase',
-				categoryId: 'system:purchase',
-				subtype: 'Ürün alımı',
-				amountCents: Math.round(row.total * 100),
-				date: dateLabel(row.createdAt),
-				sequence: row.createdAt.getTime(),
-				description: row.name ?? '',
-				editable: false,
-			})),
-			...sales.map((row) => ({
-				id: `sale:${row.requestId}`,
-				supplierSales: row.lines.flatMap((line) => line.suppliers ?? []),
-				source: 'sale',
-				group: 'sale',
-				categoryId: 'system:sale',
-				subtype: 'Ürün satışı',
-				amountCents: Math.round(row.totalRevenue * 100),
-				date: dateLabel(row.createdAt),
-				sequence: row.createdAt.getTime(),
-				description: 'Stok satışı',
-				editable: false,
-			})),
-			...legacy.map((row) => ({
-				id: `legacy-sale:${row.requestId}`,
-				source: 'sale',
-				group: 'sale',
-				categoryId: 'system:sale',
-				subtype: 'Ürün satışı',
-				amountCents: Math.round(row.revenue * 100),
-				date: dateLabel(row.createdAt),
-				sequence: row.createdAt.getTime(),
-				description: 'Stok satışı',
-				editable: false,
-			})),
-			...manual.map((row) => ({
-				id: row._id!,
-				source: 'manual',
-				group: row.group,
-				categoryId: row.categoryId,
-				subtype: row.subtype,
-				amountCents: row.amountCents,
-				date: row.date,
-				sequence: row.createdAt.getTime(),
-				description: row.description ?? '',
-				investorId: parties.investor.resolve({
+export async function financeReportData(rawQuery: unknown, allRows = false) {
+	const query = parse(orderQuerySchema, rawQuery),
+		selection = parse(selectionSchema, rawQuery);
+	if (allRows) {
+		query.page = 1;
+		query.pageSize = 2_147_483_647;
+	}
+	if (query.numericFilters?.some((f) => f.field !== 'total'))
+		throw new ValidationError(
+			'Bakiye için yalnızca işlem tutarı filtrelenebilir.',
+		);
+	const [purchase, sales, legacy, manual, subtypes, parties] =
+		await Promise.all([
+			Order.find().select('name bayiId bayiPhone total createdAt').lean(),
+			StockRestock.find()
+				.select('requestId totalRevenue createdAt lines.suppliers')
+				.lean(),
+			StockSale.find().select('requestId revenue createdAt').lean(),
+			FinanceEntry.find({ voidedAt: null }).lean(),
+			categories(),
+			loadPartyDirectory(),
+		]);
+	const rows = financeLedger([
+		...purchase.map((row) => ({
+			id: `purchase:${row._id}`,
+			source: 'purchase',
+			...parties.purchases.get(String(row._id)),
+			group: 'purchase',
+			categoryId: 'system:purchase',
+			subtype: 'Ürün alımı',
+			amountCents: Math.round(row.total * 100),
+			date: dateLabel(row.createdAt),
+			sequence: row.createdAt.getTime(),
+			description: row.name ?? '',
+			editable: false,
+		})),
+		...sales.map((row) => ({
+			id: `sale:${row.requestId}`,
+			supplierSales: row.lines.flatMap((line) => line.suppliers ?? []),
+			source: 'sale',
+			group: 'sale',
+			categoryId: 'system:sale',
+			subtype: 'Ürün satışı',
+			amountCents: Math.round(row.totalRevenue * 100),
+			date: dateLabel(row.createdAt),
+			sequence: row.createdAt.getTime(),
+			description: 'Stok satışı',
+			editable: false,
+		})),
+		...legacy.map((row) => ({
+			id: `legacy-sale:${row.requestId}`,
+			source: 'sale',
+			group: 'sale',
+			categoryId: 'system:sale',
+			subtype: 'Ürün satışı',
+			amountCents: Math.round(row.revenue * 100),
+			date: dateLabel(row.createdAt),
+			sequence: row.createdAt.getTime(),
+			description: 'Stok satışı',
+			editable: false,
+		})),
+		...manual.map((row) => ({
+			id: row._id!,
+			source: 'manual',
+			group: row.group,
+			categoryId: row.categoryId,
+			subtype: row.subtype,
+			amountCents: row.amountCents,
+			date: row.date,
+			sequence: row.createdAt.getTime(),
+			description: row.description ?? '',
+			investorId: parties.investor.resolve({
+				id: row.investorId,
+				name: row.investorName,
+				phone: row.investorPhone,
+				createdAt: row.createdAt,
+			}),
+			currentInvestorName: parties.investor.currentName(
+				parties.investor.resolve({
 					id: row.investorId,
 					name: row.investorName,
 					phone: row.investorPhone,
 					createdAt: row.createdAt,
 				}),
-				currentInvestorName: parties.investor.currentName(
-					parties.investor.resolve({
-						id: row.investorId,
-						name: row.investorName,
-						phone: row.investorPhone,
-						createdAt: row.createdAt,
-					}),
-				),
-				investorName: row.investorName ?? null,
-				editable: true,
-			})),
-		]);
-		const bayiIds = query.bayiIds?.length
-			? query.bayiIds
-			: query.bayiId
-				? [query.bayiId]
-				: [];
-		const showRunningBalance =
-			!selection.investorId &&
-			!bayiIds.length &&
-			!query.bayiName &&
-			!selection.direction &&
-			!selection.group &&
-			!selection.categoryId &&
-			!query.numericFilters?.length &&
-			query.minTotal === undefined &&
-			query.maxTotal === undefined;
-		const signed = (row: (typeof rows)[number]) =>
-			expense(row.group) ? -row.amountCents : row.amountCents;
-		const matching = rows
-			.flatMap((row) => {
-				if (!bayiIds.length || !('supplierSales' in row)) return [row];
-				const parts = (row.supplierSales as SupplierSale[]).filter(
-					(part) => part.bayiId && bayiIds.includes(part.bayiId),
-				);
-				if (!parts.length) return [];
-				return [
-					{
-						...row,
-						bayiId: parts.length === 1 ? parts[0].bayiId : undefined,
-						matchedBayiIds: parts.map((part) => part.bayiId),
-						bayiName: parts[0].bayiName,
-						currentBayiName: parts
-							.map(
-								(part) =>
-									parties.bayi.currentName(part.bayiId) ?? part.bayiName,
-							)
-							.join(', '),
-						amountCents: parts.reduce(
-							(sum, part) => sum + Math.round(part.revenue * 100),
-							0,
-						),
-					},
-				];
-			})
-			.filter(
-				(row) =>
-					(!selection.investorId ||
-						('investorId' in row && row.investorId === selection.investorId)) &&
-					(!bayiIds.length ||
-						('bayiId' in row &&
+			),
+			investorName: row.investorName ?? null,
+			editable: true,
+		})),
+	]);
+	const bayiIds = query.bayiIds?.length
+		? query.bayiIds
+		: query.bayiId
+			? [query.bayiId]
+			: [];
+	const showRunningBalance =
+		!selection.investorId &&
+		!bayiIds.length &&
+		!query.bayiName &&
+		!selection.direction &&
+		!selection.group &&
+		!selection.categoryId &&
+		!query.numericFilters?.length &&
+		query.minTotal === undefined &&
+		query.maxTotal === undefined;
+	const signed = (row: (typeof rows)[number]) =>
+		expense(row.group) ? -row.amountCents : row.amountCents;
+	const matching = rows
+		.flatMap((row) => {
+			if (!bayiIds.length || !('supplierSales' in row)) return [row];
+			const parts = (row.supplierSales as SupplierSale[]).filter(
+				(part) => part.bayiId && bayiIds.includes(part.bayiId),
+			);
+			if (!parts.length) return [];
+			return [
+				{
+					...row,
+					bayiId: parts.length === 1 ? parts[0].bayiId : undefined,
+					matchedBayiIds: parts.map((part) => part.bayiId),
+					bayiName: parts[0].bayiName,
+					currentBayiName: parts
+						.map(
+							(part) => parties.bayi.currentName(part.bayiId) ?? part.bayiName,
+						)
+						.join(', '),
+					amountCents: parts.reduce(
+						(sum, part) => sum + Math.round(part.revenue * 100),
+						0,
+					),
+				},
+			];
+		})
+		.filter(
+			(row) =>
+				((!selection.investorId && !bayiIds.length) ||
+					(Boolean(selection.investorId) &&
+						'investorId' in row &&
+						row.investorId === selection.investorId) ||
+					(bayiIds.length > 0 &&
+						(('bayiId' in row &&
 							typeof row.bayiId === 'string' &&
 							bayiIds.includes(row.bayiId)) ||
-						('matchedBayiIds' in row &&
-							Array.isArray(row.matchedBayiIds) &&
-							row.matchedBayiIds.some((id) => bayiIds.includes(id)))) &&
-					matchesNumeric(query.numericFilters, {
-						total: row.amountCents / 100,
-					}) &&
-					(!selection.group || row.group === selection.group) &&
-					(!selection.categoryId || row.categoryId === selection.categoryId) &&
-					(!selection.direction ||
-						selection.direction ===
-							(expense(row.group) ? 'expense' : 'income')) &&
-					(query.minTotal === undefined ||
-						row.amountCents >= Math.round(query.minTotal * 100)) &&
-					(query.maxTotal === undefined ||
-						row.amountCents <= Math.round(query.maxTotal * 100)),
-			);
-		const filtered = matching
-			.filter(
-				(row) =>
-					(!query.from || row.date >= query.from) &&
-					(!query.until || row.date <= query.until),
-			)
-			.sort(
-				(a, b) =>
-					b.date.localeCompare(a.date) ||
-					b.sequence - a.sequence ||
-					b.id.localeCompare(a.id),
-			);
-		const openingFrom = query.from;
-		const opening = openingFrom
-			? matching
-					.filter((row) => row.date < openingFrom)
-					.reduce((sum, row) => sum + signed(row), 0)
-			: 0;
-		const income = filtered
-				.filter((row) => !expense(row.group))
-				.reduce((sum, row) => sum + row.amountCents, 0),
-			expenses = filtered
-				.filter((row) => expense(row.group))
-				.reduce((sum, row) => sum + row.amountCents, 0);
-		res.json({
-			categories: subtypes,
-			showRunningBalance,
-			daily: dailyFinanceTotals(filtered),
-			entries: filtered
-				.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
-				.map(
-					({
-						amountCents,
-						sequence: _sequence,
-						balanceBefore,
-						balanceAfter,
-						...row
-					}) => ({
-						...row,
-						amount: amountCents / 100,
-						...(showRunningBalance ? { balanceBefore, balanceAfter } : {}),
-						direction: expense(row.group) ? 'expense' : 'income',
-					}),
-				),
-			count: filtered.length,
-			totalPages: Math.max(1, Math.ceil(filtered.length / query.pageSize)),
-			income: income / 100,
-			expenses: expenses / 100,
-			net: (income - expenses) / 100,
-			openingBalance: opening / 100,
-			closingBalance: (opening + income - expenses) / 100,
-			balance: rows.reduce((sum, row) => sum + signed(row), 0) / 100,
-		});
+							('matchedBayiIds' in row &&
+								Array.isArray(row.matchedBayiIds) &&
+								row.matchedBayiIds.some((id) => bayiIds.includes(id)))))) &&
+				matchesNumeric(query.numericFilters, {
+					total: row.amountCents / 100,
+				}) &&
+				(!selection.group || row.group === selection.group) &&
+				(!selection.categoryId || row.categoryId === selection.categoryId) &&
+				(!selection.direction ||
+					selection.direction ===
+						(expense(row.group) ? 'expense' : 'income')) &&
+				(query.minTotal === undefined ||
+					row.amountCents >= Math.round(query.minTotal * 100)) &&
+				(query.maxTotal === undefined ||
+					row.amountCents <= Math.round(query.maxTotal * 100)),
+		);
+	const filtered = matching
+		.filter(
+			(row) =>
+				(!query.from || row.date >= query.from) &&
+				(!query.until || row.date <= query.until),
+		)
+		.sort(
+			(a, b) =>
+				b.date.localeCompare(a.date) ||
+				b.sequence - a.sequence ||
+				b.id.localeCompare(a.id),
+		);
+	const openingFrom = query.from;
+	const opening = openingFrom
+		? matching
+				.filter((row) => row.date < openingFrom)
+				.reduce((sum, row) => sum + signed(row), 0)
+		: 0;
+	const income = filtered
+			.filter((row) => !expense(row.group))
+			.reduce((sum, row) => sum + row.amountCents, 0),
+		expenses = filtered
+			.filter((row) => expense(row.group))
+			.reduce((sum, row) => sum + row.amountCents, 0);
+	return {
+		categories: subtypes,
+		showRunningBalance,
+		daily: dailyFinanceTotals(filtered),
+		entries: filtered
+			.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
+			.map(
+				({
+					amountCents,
+					sequence: _sequence,
+					balanceBefore,
+					balanceAfter,
+					...row
+				}) => ({
+					...row,
+					amount: amountCents / 100,
+					...(showRunningBalance ? { balanceBefore, balanceAfter } : {}),
+					direction: expense(row.group) ? 'expense' : 'income',
+				}),
+			),
+		count: filtered.length,
+		totalPages: Math.max(1, Math.ceil(filtered.length / query.pageSize)),
+		income: income / 100,
+		expenses: expenses / 100,
+		net: (income - expenses) / 100,
+		openingBalance: opening / 100,
+		closingBalance: (opening + income - expenses) / 100,
+		balance: rows.reduce((sum, row) => sum + signed(row), 0) / 100,
+	};
+}
+export const getFinance = async (
+	req: Request,
+	res: Response,
+): Promise<void> => {
+	try {
+		res.json(await financeReportData(req.query));
 	} catch (error) {
 		handleFinanceError(error, res);
 	}
@@ -565,6 +578,7 @@ export const createEntry = async (req: Request, res: Response) => {
 				},
 			],
 		});
+		await queueTransactionEmail(financeReceipt(entry, user, 'create'));
 		res.status(201).json({ entry });
 	} catch (error) {
 		handleFinanceError(error, res);
@@ -574,9 +588,10 @@ export const voidEntry = async (req: Request, res: Response) => {
 	try {
 		const id = parse(z.string().uuid(), req.params.id),
 			user = await actor(req);
+		const voidedAt = new Date();
 		const entry = await FinanceEntry.findOneAndUpdate(
 			{ _id: id, voidedAt: null },
-			{ $set: { voidedAt: new Date() } },
+			{ $set: { voidedAt } },
 			{ returnDocument: 'before' },
 		).lean();
 		if (entry)
@@ -596,6 +611,10 @@ export const voidEntry = async (req: Request, res: Response) => {
 					},
 				],
 			});
+		if (entry)
+			await queueTransactionEmail(
+				financeReceipt(entry, user, 'void', voidedAt),
+			);
 		res.json({ success: true });
 	} catch (error) {
 		handleFinanceError(error, res);

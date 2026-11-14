@@ -34,6 +34,7 @@ export const ITEMS_ROUTES = {
 } as const;
 
 export const ADMIN_ROUTES = {
+	TEST_EMAIL: `${API_BASE_PATHS.ADMINS}/test-email`,
 	LIST: `${API_BASE_PATHS.ADMINS}`,
 	CREATE: `${API_BASE_PATHS.ADMINS}`,
 	UPDATE_PERMISSIONS: `${API_BASE_PATHS.ADMINS}/:id/permissions`,
