@@ -5,6 +5,13 @@ services:
     build: .
     env_file:
       - .env.prod
+    environment:
+      ITEMS_SNAPSHOT_PATH: /data/inventory-snapshots/items-snapshot.json
+    volumes:
+      - inventory-snapshots:/data/inventory-snapshots
     ports:
       - '127.0.0.1:${HOST_PORT:?run via deploy/deploy.sh}:3010'
     restart: always
+volumes:
+  inventory-snapshots:
+    name: hyglobalcopcu_inventory_snapshots

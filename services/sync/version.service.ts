@@ -88,6 +88,12 @@ export async function initVersionState(): Promise<void> {
 	log.info({ version: committedVersion }, 'Version state loaded');
 }
 
+// Serialize a catalog snapshot with bulk writes without advancing its version.
+export function withCatalogRead<T>(read: () => Promise<T>): Promise<T> {
+	const run = writeQueue.then(read);
+	writeQueue = run.catch(() => undefined);
+	return run;
+}
 export function getVersion(): number {
 	return committedVersion;
 }

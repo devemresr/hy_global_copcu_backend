@@ -24,6 +24,12 @@ import {
 } from '../controllers/reportSchedule.controller';
 import env from '../config/env';
 import {
+	getInventorySnapshotSchedule,
+	updateInventorySnapshotSchedule,
+	refreshInventorySnapshotNow,
+} from '../controllers/inventorySnapshot.controller';
+import { inventorySnapshotScheduleSchema } from '../schemas/inventorySnapshot.schema';
+import {
 	getEmailPreferences,
 	saveEmailPreferences,
 	emailPreferencesSchema,
@@ -44,6 +50,19 @@ const emailLimiter = rateLimit({
 const router = () => {
 	const router = Router();
 	router.get(
+		'/admins/inventory-snapshot',
+		...requireAuth(),
+		requireHeadAdmin,
+		getInventorySnapshotSchedule,
+	);
+	router.put(
+		'/admins/inventory-snapshot',
+		...requireAuth(),
+		requireHeadAdmin,
+		validateBody(inventorySnapshotScheduleSchema),
+		updateInventorySnapshotSchedule,
+	);
+	router.get(
 		'/admins/email-preferences',
 		...requireAuth(),
 		requireHeadAdmin,
@@ -56,7 +75,14 @@ const router = () => {
 		validateBody(emailPreferencesSchema),
 		saveEmailPreferences,
 	);
-	if (env.NODE_ENV === 'development')
+	if (env.NODE_ENV === 'development') {
+		router.post(
+			'/admins/inventory-snapshot/refresh-now',
+			...requireAuth(),
+			requireHeadAdmin,
+			emailLimiter,
+			refreshInventorySnapshotNow,
+		);
 		router.post(
 			'/admins/report-schedules/:id/send-now',
 			...requireAuth(),
@@ -64,6 +90,7 @@ const router = () => {
 			emailLimiter,
 			sendReportScheduleNow,
 		);
+	}
 	router.get(
 		'/admins/report-schedules',
 		...requireAuth(),

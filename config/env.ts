@@ -20,6 +20,7 @@ const env = cleanEnv(process.env, {
 	SMTP_PASSWORD: str({ default: '' }),
 	SMTP_FROM: str({ default: '' }),
 	TRANSACTION_EMAIL_TO: str({ default: '' }),
+	ITEMS_SNAPSHOT_PATH: str({ default: '' }),
 	UMAMI_BASE_URL: str({ default: '' }),
 	UMAMI_WEBSITE_ID: str({ default: '' }),
 	UMAMI_API_TOKEN: str({ default: '' }),
